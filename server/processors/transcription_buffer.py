@@ -7,7 +7,12 @@ then emits a single consolidated transcription for LLM cleanup.
 from datetime import UTC, datetime
 from typing import Any
 
-from pipecat.frames.frames import Frame, InputTransportMessageFrame, TranscriptionFrame
+from pipecat.frames.frames import (
+    Frame,
+    InputTransportMessageFrame,
+    OutputTransportMessageFrame,
+    TranscriptionFrame,
+)
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.transcriptions.language import Language
 
@@ -88,9 +93,21 @@ class TranscriptionBufferProcessor(FrameProcessor):
                         language=self._last_language,
                     )
                     await self.push_frame(consolidated_frame, direction)
-                    self._buffer = ""
                 else:
-                    logger.info("Stop-recording received but buffer is empty")
+                    # Buffer is empty - send immediate response so client can reset
+                    logger.info("Stop-recording received but buffer is empty, sending empty response")
+                    empty_response_message = {
+                        "label": "rtvi-ai",
+                        "type": "server-message",
+                        "data": {"type": "recording-complete", "hasContent": False},
+                    }
+                    await self.push_frame(
+                        OutputTransportMessageFrame(message=empty_response_message), direction
+                    )
+                # Always reset buffer state
+                self._buffer = ""
+                self._last_user_id = "user"
+                self._last_language = None
                 # Don't pass through the client message frame
                 return
 

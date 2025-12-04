@@ -34,6 +34,17 @@ function isTranscriptMessage(
 	);
 }
 
+function isRecordingCompleteMessage(
+	msg: unknown,
+): msg is { type: "recording-complete"; hasContent: boolean } {
+	return (
+		typeof msg === "object" &&
+		msg !== null &&
+		"type" in msg &&
+		(msg as { type: unknown }).type === "recording-complete"
+	);
+}
+
 function RecordingControl() {
 	const client = usePipecatClient();
 	const {
@@ -175,6 +186,11 @@ function RecordingControl() {
 					console.error("[Pipecat] Failed to type text:", error);
 				}
 				addHistoryEntry.mutate(message.text);
+				handleResponse();
+			} else if (isRecordingCompleteMessage(message)) {
+				// Empty recording - no content to type, just reset state
+				clearResponseTimeout();
+				console.log("[Pipecat] Recording complete with no content");
 				handleResponse();
 			}
 		};
