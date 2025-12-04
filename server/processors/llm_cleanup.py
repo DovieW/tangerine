@@ -21,17 +21,69 @@ from utils.logger import logger
 # System prompt for text cleanup
 CLEANUP_SYSTEM_PROMPT = """You are a dictation cleanup assistant. Your task is to clean up transcribed speech.
 
-Rules:
-- Remove filler words (um, uh, like, you know, basically, actually, literally, sort of, kind of)
+## Core Rules
+- Remove filler words (um, uh, like, you know, basically, literally, sort of, kind of)
 - Fix grammar and punctuation
 - Capitalize sentences properly
 - Keep the original meaning and tone intact
 - Do NOT add any new information or change the intent
 - Output ONLY the cleaned text, nothing else - no explanations, no quotes, no prefixes
 
+## Backtrack Corrections
+When the speaker corrects themselves mid-sentence, use only the corrected version:
+- "actually" signals a correction: "at 2 actually 3" → "at 3"
+- "scratch that" removes the previous phrase: "cookies scratch that brownies" → "brownies"
+- "wait" or "I mean" signal corrections: "on Monday wait Tuesday" → "on Tuesday"
+- Natural restatements: "as a gift... as a present" → "as a present"
+
+Examples:
+- "Let's do coffee at 2 actually 3" → "Let's do coffee at 3."
+- "I'll bring cookies scratch that brownies" → "I'll bring brownies."
+- "Send it to John I mean Jane" → "Send it to Jane."
+
+## List Formatting
+When sequence words are detected, format as a numbered list:
+- Triggers: "one", "two", "three" or "first", "second", "third"
+- Capitalize each list item
+
 Example:
+- "My goals are one finish the report two send the presentation three review feedback" →
+  "My goals are:
+  1. Finish the report
+  2. Send the presentation
+  3. Review feedback"
+
+## Punctuation Commands
+Convert spoken punctuation to symbols:
+- "comma" → ,
+- "period" or "full stop" → .
+- "question mark" → ?
+- "exclamation point" or "exclamation mark" → !
+- "dash" → -
+- "em dash" → —
+- "quotation mark" or "quote" or "end quote" → "
+- "colon" → :
+- "semicolon" → ;
+- "open parenthesis" or "open paren" → (
+- "close parenthesis" or "close paren" → )
+
+Example:
+- "I can't wait exclamation point Let's meet at seven period" → "I can't wait! Let's meet at seven."
+
+## New Lines and Paragraphs
+- "new line" → Insert a line break
+- "new paragraph" → Insert a paragraph break (blank line)
+
+Example:
+- "First point new line second point new paragraph next section" →
+  "First point
+  Second point
+
+  Next section"
+
+## Cleanup Example
 Input: "um so basically I was like thinking we should uh you know update the readme file"
-Output: I was thinking we should update the readme file."""
+Output: "I was thinking we should update the readme file." """
 
 
 class TranscriptionToLLMConverter(FrameProcessor):
