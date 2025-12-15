@@ -36,7 +36,7 @@ Open-source alternative to [Wispr Flow](https://wisprflow.ai) and [Superwhisper]
 **Why not proprietary tools?** Unlike Wispr Flow or Superwhisper, this project gives you full control and transparency.
 
 **Fully customizable.** This is your voice interface, built your way:
-- **Choose your AI providers** — Pick your STT (Cartesia, Deepgram, AssemblyAI) and LLM (Cerebras, OpenAI, Anthropic)
+- **Choose your AI providers** — Pick your STT (Cartesia, Deepgram, AssemblyAI) and LLM (Cerebras, OpenAI, Anthropic), run fully local with Whisper and Ollama, or use any of [Pipecat's supported services](https://docs.pipecat.ai/server/services/supported-services)
 - **Customize the formatting** — Modify prompts, add custom rules, build your personal dictionary
 - **Extend freely** — Built on [Pipecat](https://github.com/pipecat-ai/pipecat)'s modular pipeline, fully open-source
 
@@ -140,6 +140,12 @@ Sign up and get API keys for the providers you want to use. Some providers with 
 - Cerebras: https://cloud.cerebras.ai (LLM)
 - Gemini: https://aistudio.google.com (LLM)
 - Groq: https://console.groq.com (STT/LLM)
+
+**Or run fully local:**
+```bash
+ollama run llama3.2
+```
+Then in your `.env` file, set `OLLAMA_BASE_URL=http://localhost:11434` for local LLM and `WHISPER_ENABLED=true` for local STT.
 
 ### 2. Set Up the Server
 
