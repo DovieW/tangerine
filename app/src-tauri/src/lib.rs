@@ -7,11 +7,16 @@ use tauri::{
 use tauri_utils::config::BackgroundThrottlingPolicy;
 
 mod audio;
+mod audio_capture;
 mod audio_mute;
 mod commands;
 mod history;
+mod llm;
+mod pipeline;
 mod settings;
 mod state;
+mod stt;
+mod vad;
 
 #[cfg(test)]
 mod tests;
@@ -88,6 +93,14 @@ fn start_recording(
             }
         }
     }
+
+    // Start pipeline recording
+    if let Some(pipeline) = app.try_state::<pipeline::SharedPipeline>() {
+        if let Err(e) = pipeline.start_recording() {
+            log::error!("Failed to start pipeline recording: {}", e);
+        }
+    }
+
     let _ = app.emit("recording-start", ());
 }
 
@@ -114,6 +127,40 @@ fn stop_recording(
     if sound_enabled {
         audio::play_sound(audio::SoundType::RecordingStop);
     }
+
+    // Stop pipeline and trigger transcription in background
+    if let Some(pipeline) = app.try_state::<pipeline::SharedPipeline>() {
+        let pipeline_clone = (*pipeline).clone();
+        let app_clone = app.clone();
+        tauri::async_runtime::spawn(async move {
+            let _ = app_clone.emit("pipeline-transcription-started", ());
+            match pipeline_clone.stop_and_transcribe().await {
+                Ok(transcript) => {
+                    log::info!("Transcription complete: {} chars", transcript.len());
+                    let _ = app_clone.emit("pipeline-transcript-ready", &transcript);
+
+                    // Type the transcript
+                    if !transcript.is_empty() {
+                        if let Err(e) = commands::text::type_text_blocking(&transcript) {
+                            log::error!("Failed to type transcript: {}", e);
+                        }
+
+                        // Save to history
+                        if let Some(history) = app_clone.try_state::<HistoryStorage>() {
+                            if let Err(e) = history.add_entry(transcript) {
+                                log::warn!("Failed to save to history: {}", e);
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::error!("Transcription failed: {}", e);
+                    let _ = app_clone.emit("pipeline-error", e.to_string());
+                }
+            }
+        });
+    }
+
     let _ = app.emit("recording-stop", ());
 }
 
@@ -291,6 +338,38 @@ pub fn run() {
             commands::history::delete_history_entry,
             commands::history::clear_history,
             commands::overlay::resize_overlay,
+            // Pipeline commands for all-in-app STT
+            commands::recording::pipeline_start_recording,
+            commands::recording::pipeline_stop_and_transcribe,
+            commands::recording::pipeline_cancel,
+            commands::recording::pipeline_get_state,
+            commands::recording::pipeline_is_recording,
+            commands::recording::pipeline_is_error,
+            commands::recording::pipeline_update_config,
+            commands::recording::pipeline_dictate,
+            commands::recording::pipeline_toggle,
+            commands::recording::pipeline_force_reset,
+            // Config commands (replacing Python server)
+            commands::config::get_default_sections,
+            commands::config::get_available_providers,
+            commands::config::sync_pipeline_config,
+            // VAD settings commands
+            commands::config::get_vad_settings,
+            commands::config::set_vad_settings,
+            // LLM formatting commands
+            commands::llm::get_llm_default_prompts,
+            commands::llm::get_llm_providers,
+            commands::llm::update_llm_config,
+            commands::llm::update_llm_prompts,
+            commands::llm::get_llm_config,
+            // Local Whisper model management commands
+            commands::whisper::is_local_whisper_available,
+            commands::whisper::get_whisper_models,
+            commands::whisper::get_whisper_models_dir,
+            commands::whisper::is_whisper_model_downloaded,
+            commands::whisper::get_whisper_model_url,
+            commands::whisper::delete_whisper_model,
+            commands::whisper::validate_whisper_model,
         ])
         .setup(|app| {
             // Initialize history storage
@@ -305,6 +384,13 @@ pub fn run() {
             // Initialize audio mute manager (may be None on unsupported platforms)
             if let Some(audio_mute_manager) = AudioMuteManager::new() {
                 app.manage(audio_mute_manager);
+            }
+
+            // Initialize pipeline with settings from store
+            #[cfg(desktop)]
+            {
+                let pipeline = initialize_pipeline_from_settings(app.handle());
+                app.manage(pipeline);
             }
 
             // Register shortcuts from store (now that store plugin is available)
@@ -444,6 +530,47 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 fn build_global_shortcut_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
     // Just initialize the plugin - shortcuts will be registered in setup() after store is available
     tauri_plugin_global_shortcut::Builder::new().build()
+}
+
+/// Initialize the recording pipeline from settings in the store
+#[cfg(desktop)]
+fn initialize_pipeline_from_settings(app: &AppHandle) -> pipeline::SharedPipeline {
+    use std::time::Duration;
+
+    // Read STT settings from store
+    let stt_provider: String = get_setting_from_store(app, "stt_provider", "groq".to_string());
+
+    // Get the appropriate API key based on provider
+    let stt_api_key: String = match stt_provider.as_str() {
+        "openai" => get_setting_from_store(app, "openai_api_key", String::new()),
+        "groq" => get_setting_from_store(app, "groq_api_key", String::new()),
+        "deepgram" => get_setting_from_store(app, "deepgram_api_key", String::new()),
+        _ => String::new(),
+    };
+
+    // Read VAD settings from store
+    let vad_settings: settings::VadSettings =
+        get_setting_from_store(app, "vad_settings", settings::VadSettings::default());
+
+    let config = pipeline::PipelineConfig {
+        stt_provider,
+        stt_api_key,
+        stt_model: None,
+        max_duration_secs: 300.0,
+        retry_config: stt::RetryConfig::default(),
+        vad_config: vad_settings.to_vad_auto_stop_config(),
+        transcription_timeout: Duration::from_secs(60),
+        max_recording_bytes: 50 * 1024 * 1024, // 50MB
+        llm_config: llm::LlmConfig::default(),
+    };
+
+    log::info!(
+        "Initializing pipeline with STT provider: {}, VAD enabled: {}",
+        config.stt_provider,
+        config.vad_config.enabled
+    );
+
+    pipeline::SharedPipeline::new(config)
 }
 
 /// Register shortcuts from store settings (called from setup() after store plugin is available)

@@ -21,6 +21,28 @@ pub const DEFAULT_HOLD_KEY: &str = "Backquote";
 pub const DEFAULT_PASTE_LAST_KEY: &str = "Period";
 
 // ============================================================================
+// DEFAULT VAD SETTINGS - Voice Activity Detection
+// ============================================================================
+
+/// Default VAD enabled state
+pub const DEFAULT_VAD_ENABLED: bool = false;
+
+/// Default VAD auto-stop enabled state
+pub const DEFAULT_VAD_AUTO_STOP: bool = false;
+
+/// Default VAD aggressiveness level (0-3, higher = more aggressive filtering)
+pub const DEFAULT_VAD_AGGRESSIVENESS: u8 = 2;
+
+/// Default speech frames threshold before triggering speech start
+pub const DEFAULT_VAD_SPEECH_FRAMES_THRESHOLD: u32 = 3;
+
+/// Default hangover frames (silence frames before triggering speech end)
+pub const DEFAULT_VAD_HANGOVER_FRAMES: u32 = 30;
+
+/// Default pre-roll milliseconds to capture before speech is detected
+pub const DEFAULT_VAD_PRE_ROLL_MS: u32 = 300;
+
+// ============================================================================
 
 /// Configuration for a hotkey combination
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -101,5 +123,61 @@ impl HotkeyConfig {
                 .to_shortcut()
                 .expect("Default hotkey must be valid")
         })
+    }
+}
+
+/// Voice Activity Detection settings
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct VadSettings {
+    /// Enable VAD processing
+    pub enabled: bool,
+    /// Automatically stop recording when speech ends
+    pub auto_stop: bool,
+    /// VAD aggressiveness level (0-3)
+    pub aggressiveness: u8,
+    /// Consecutive speech frames before triggering speech start
+    pub speech_frames_threshold: u32,
+    /// Consecutive silence frames before triggering speech end
+    pub hangover_frames: u32,
+    /// Milliseconds of audio to capture before speech is detected
+    pub pre_roll_ms: u32,
+}
+
+impl Default for VadSettings {
+    fn default() -> Self {
+        Self {
+            enabled: DEFAULT_VAD_ENABLED,
+            auto_stop: DEFAULT_VAD_AUTO_STOP,
+            aggressiveness: DEFAULT_VAD_AGGRESSIVENESS,
+            speech_frames_threshold: DEFAULT_VAD_SPEECH_FRAMES_THRESHOLD,
+            hangover_frames: DEFAULT_VAD_HANGOVER_FRAMES,
+            pre_roll_ms: DEFAULT_VAD_PRE_ROLL_MS,
+        }
+    }
+}
+
+impl VadSettings {
+    /// Convert to audio capture VAD config
+    pub fn to_vad_auto_stop_config(&self) -> crate::audio_capture::VadAutoStopConfig {
+        use crate::audio_capture::VadAutoStopConfig;
+        use crate::vad::{VadAggressiveness, VadConfig};
+
+        VadAutoStopConfig {
+            enabled: self.enabled,
+            auto_stop: self.auto_stop,
+            vad_config: VadConfig {
+                aggressiveness: match self.aggressiveness {
+                    0 => VadAggressiveness::Quality,
+                    1 => VadAggressiveness::LowBitrate,
+                    2 => VadAggressiveness::Aggressive,
+                    _ => VadAggressiveness::VeryAggressive,
+                },
+                speech_frames_threshold: self.speech_frames_threshold,
+                hangover_frames: self.hangover_frames,
+                pre_roll_ms: self.pre_roll_ms,
+                frame_duration_ms: 30, // Fixed at 30ms for webrtc-vad
+                sample_rate: 16000,    // Fixed at 16kHz for webrtc-vad
+            },
+        }
     }
 }

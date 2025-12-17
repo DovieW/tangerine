@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useRef } from "react";
 import {
 	type CleanupPromptSections,
 	configAPI,
@@ -8,50 +7,6 @@ import {
 	tauriAPI,
 	validateHotkeyNotDuplicate,
 } from "./tauri";
-
-type ConnectionState =
-	| "disconnected"
-	| "connecting"
-	| "idle"
-	| "recording"
-	| "processing";
-
-/**
- * Hook to refresh all server-side queries when connection is established.
- * Call this from a component that has access to the connection state.
- */
-export function useRefreshServerQueriesOnConnect(
-	connectionState: ConnectionState,
-) {
-	const queryClient = useQueryClient();
-	const previousStateRef = useRef(connectionState);
-
-	useEffect(() => {
-		const wasDisconnected =
-			previousStateRef.current === "disconnected" ||
-			previousStateRef.current === "connecting";
-		const isNowConnected =
-			connectionState === "idle" ||
-			connectionState === "recording" ||
-			connectionState === "processing";
-
-		if (wasDisconnected && isNowConnected) {
-			// Invalidate server-side queries (static data that may have changed)
-			queryClient.invalidateQueries({ queryKey: ["availableProviders"] });
-			queryClient.invalidateQueries({ queryKey: ["defaultSections"] });
-		}
-
-		previousStateRef.current = connectionState;
-	}, [connectionState, queryClient]);
-}
-
-export function useServerUrl() {
-	return useQuery({
-		queryKey: ["serverUrl"],
-		queryFn: () => invoke<string>("get_server_url"),
-		staleTime: Number.POSITIVE_INFINITY,
-	});
-}
 
 export function useTypeText() {
 	return useMutation({
@@ -264,13 +219,12 @@ export function useClearHistory() {
 	});
 }
 
-// Config API queries and mutations (FastAPI server)
+// Config API queries and mutations (now using Tauri commands)
 export function useDefaultSections() {
 	return useQuery({
 		queryKey: ["defaultSections"],
 		queryFn: () => configAPI.getDefaultSections(),
 		staleTime: Number.POSITIVE_INFINITY, // Default prompts never change
-		retry: false, // Don't retry if server not available
 	});
 }
 
@@ -280,15 +234,17 @@ export function useAvailableProviders() {
 	return useQuery({
 		queryKey: ["availableProviders"],
 		queryFn: () => configAPI.getAvailableProviders(),
-		retry: false, // Don't retry if server not available
 	});
 }
 
 export function useUpdateSTTProvider() {
 	const queryClient = useQueryClient();
 	return useMutation({
-		mutationFn: (provider: string | null) =>
-			tauriAPI.updateSTTProvider(provider),
+		mutationFn: async (provider: string | null) => {
+			await tauriAPI.updateSTTProvider(provider);
+			// Sync the pipeline configuration when STT provider changes
+			await configAPI.syncPipelineConfig();
+		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ["settings"] });
 		},

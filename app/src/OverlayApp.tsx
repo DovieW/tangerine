@@ -1,166 +1,370 @@
-import { Loader } from "@mantine/core";
+import { Loader, Tooltip } from "@mantine/core";
 import { useResizeObserver, useTimeout } from "@mantine/hooks";
-import { PipecatClient, RTVIEvent } from "@pipecat-ai/client-js";
-import {
-	PipecatClientProvider,
-	usePipecatClient,
-	useRTVIClientEvent,
-} from "@pipecat-ai/client-react";
-import { SmallWebRTCTransport } from "@pipecat-ai/small-webrtc-transport";
-import { ThemeProvider, UserAudioComponent } from "@pipecat-ai/voice-ui-kit";
 import { useQueryClient } from "@tanstack/react-query";
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useDrag } from "@use-gesture/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { z } from "zod";
 import Logo from "./assets/logo.svg?react";
-import {
-	useAddHistoryEntry,
-	useServerUrl,
-	useSettings,
-	useTypeText,
-} from "./lib/queries";
-import {
-	type CleanupPromptSections,
-	type ConnectionState,
-	tauriAPI,
-} from "./lib/tauri";
-import { useRecordingStore } from "./stores/recordingStore";
+import { useAddHistoryEntry, useSettings, useTypeText } from "./lib/queries";
+import { type ConnectionState, tauriAPI } from "./lib/tauri";
 import "./app.css";
 
-// Zod schemas for message validation
-const TranscriptMessageSchema = z.object({
-	type: z.literal("transcript"),
-	text: z.string(),
-});
+/**
+ * Pipeline state machine states (matches Rust PipelineState)
+ */
+type PipelineState = "idle" | "recording" | "transcribing" | "error";
 
-const RecordingCompleteMessageSchema = z.object({
-	type: z.literal("recording-complete"),
-	hasContent: z.boolean().optional(),
-});
+/**
+ * Error info for user feedback
+ */
+interface ErrorInfo {
+	message: string;
+	recoverable: boolean;
+}
 
-// Config response schemas (relayed to main window for notifications)
-const ConfigUpdatedMessageSchema = z.object({
-	type: z.literal("config-updated"),
-	setting: z.string(),
-	value: z.unknown(),
-	success: z.literal(true),
-});
+/**
+ * Parse error message to user-friendly format
+ */
+function parseError(error: unknown): ErrorInfo {
+	const errorStr = String(error);
 
-const ConfigErrorMessageSchema = z.object({
-	type: z.literal("config-error"),
-	setting: z.string(),
-	error: z.string(),
-});
+	// Network/API errors
+	if (errorStr.includes("Network") || errorStr.includes("network")) {
+		return { message: "Network error - check connection", recoverable: true };
+	}
+	if (errorStr.includes("timeout") || errorStr.includes("Timeout")) {
+		return { message: "Request timed out - try again", recoverable: true };
+	}
+	if (errorStr.includes("API error") || errorStr.includes("401")) {
+		return { message: "API error - check API key", recoverable: true };
+	}
+	if (errorStr.includes("rate limit") || errorStr.includes("429")) {
+		return { message: "Rate limited - wait and retry", recoverable: true };
+	}
 
-// Non-empty array type for type-safe batched sends
-type NonEmptyArray<T> = [T, ...T[]];
+	// Provider errors
+	if (errorStr.includes("NoProvider") || errorStr.includes("No STT provider")) {
+		return { message: "No STT provider configured", recoverable: true };
+	}
 
-// Discriminated union for type-safe config messages
-type ConfigMessage =
-	| { type: "set-prompt-sections"; data: { sections: CleanupPromptSections } }
-	| { type: "set-stt-provider"; data: { provider: string } }
-	| { type: "set-llm-provider"; data: { provider: string } }
-	| { type: "set-stt-timeout"; data: { timeout_seconds: number } };
+	// Recording errors
+	if (errorStr.includes("NotRecording")) {
+		return { message: "Not recording", recoverable: true };
+	}
+	if (errorStr.includes("AlreadyRecording")) {
+		return { message: "Already recording", recoverable: true };
+	}
+	if (errorStr.includes("RecordingTooLarge")) {
+		return { message: "Recording too long", recoverable: true };
+	}
 
-// Helper to send multiple config messages - only callable with non-empty list
-function sendConfigMessages(
-	client: PipecatClient,
-	messages: NonEmptyArray<ConfigMessage>,
-) {
-	for (const { type, data } of messages) {
-		client.sendClientMessage(type, data);
+	// Audio errors
+	if (errorStr.includes("audio") || errorStr.includes("Audio")) {
+		return { message: "Audio capture error", recoverable: true };
+	}
+
+	// Generic fallback
+	return { message: "An error occurred", recoverable: true };
+}
+
+/**
+ * Map pipeline state to connection state for UI compatibility
+ */
+function pipelineToConnectionState(state: PipelineState): ConnectionState {
+	switch (state) {
+		case "idle":
+			return "idle";
+		case "recording":
+			return "recording";
+		case "transcribing":
+			return "processing";
+		case "error":
+			return "disconnected";
 	}
 }
 
+/**
+ * Error indicator icon component
+ */
+function ErrorIcon() {
+	return (
+		<svg
+			width="20"
+			height="20"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="2"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			role="img"
+			aria-label="Error"
+		>
+			<circle cx="12" cy="12" r="10" />
+			<line x1="12" y1="8" x2="12" y2="12" />
+			<line x1="12" y1="16" x2="12.01" y2="16" />
+		</svg>
+	);
+}
+function AudioVisualizer({
+	isActive,
+	barColor = "#eeeeee",
+}: {
+	isActive: boolean;
+	barColor?: string;
+}) {
+	const canvasRef = useRef<HTMLCanvasElement>(null);
+	const animationRef = useRef<number | null>(null);
+	const analyserRef = useRef<AnalyserNode | null>(null);
+	const streamRef = useRef<MediaStream | null>(null);
+
+	useEffect(() => {
+		if (!isActive) {
+			// Cleanup when not active
+			if (animationRef.current) {
+				cancelAnimationFrame(animationRef.current);
+				animationRef.current = null;
+			}
+			if (streamRef.current) {
+				for (const track of streamRef.current.getTracks()) {
+					track.stop();
+				}
+				streamRef.current = null;
+			}
+			analyserRef.current = null;
+			return;
+		}
+
+		let mounted = true;
+
+		const setupAudio = async () => {
+			try {
+				const stream = await navigator.mediaDevices.getUserMedia({
+					audio: true,
+				});
+				if (!mounted) {
+					for (const track of stream.getTracks()) {
+						track.stop();
+					}
+					return;
+				}
+
+				streamRef.current = stream;
+				const audioContext = new AudioContext();
+				const source = audioContext.createMediaStreamSource(stream);
+				const analyser = audioContext.createAnalyser();
+				analyser.fftSize = 64;
+				source.connect(analyser);
+				analyserRef.current = analyser;
+
+				const canvas = canvasRef.current;
+				if (!canvas) return;
+				const ctx = canvas.getContext("2d");
+				if (!ctx) return;
+
+				const draw = () => {
+					if (!analyserRef.current || !mounted) return;
+
+					const bufferLength = analyserRef.current.frequencyBinCount;
+					const dataArray = new Uint8Array(bufferLength);
+					analyserRef.current.getByteFrequencyData(dataArray);
+
+					ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+					const barCount = 5;
+					const barWidth = 3;
+					const gap = 2;
+					const totalWidth = barCount * barWidth + (barCount - 1) * gap;
+					const startX = (canvas.width - totalWidth) / 2;
+					const maxBarHeight = canvas.height * 0.7;
+
+					for (let i = 0; i < barCount; i++) {
+						// Sample from different parts of the frequency spectrum
+						const dataIndex = Math.floor((i / barCount) * (bufferLength * 0.6));
+						const value = dataArray[dataIndex] ?? 0;
+						const barHeight = Math.max(4, (value / 255) * maxBarHeight);
+
+						const x = startX + i * (barWidth + gap);
+						const y = (canvas.height - barHeight) / 2;
+
+						ctx.fillStyle = barColor;
+						ctx.beginPath();
+						ctx.roundRect(x, y, barWidth, barHeight, 1.5);
+						ctx.fill();
+					}
+
+					animationRef.current = requestAnimationFrame(draw);
+				};
+
+				draw();
+			} catch (error) {
+				console.error("[AudioVisualizer] Failed to setup audio:", error);
+			}
+		};
+
+		setupAudio();
+
+		return () => {
+			mounted = false;
+			if (animationRef.current) {
+				cancelAnimationFrame(animationRef.current);
+			}
+			if (streamRef.current) {
+				for (const track of streamRef.current.getTracks()) {
+					track.stop();
+				}
+			}
+		};
+	}, [isActive, barColor]);
+
+	return (
+		<canvas
+			ref={canvasRef}
+			width={48}
+			height={48}
+			style={{ display: isActive ? "block" : "none" }}
+		/>
+	);
+}
+
 function RecordingControl() {
-	const client = usePipecatClient();
 	const queryClient = useQueryClient();
-	const {
-		state,
-		setClient,
-		startRecording,
-		stopRecording,
-		handleResponse,
-		handleConnected,
-		handleDisconnected,
-	} = useRecordingStore();
-
-	// Use Mantine's useResizeObserver hook
+	const [pipelineState, setPipelineState] = useState<PipelineState>("idle");
+	const [lastError, setLastError] = useState<ErrorInfo | null>(null);
 	const [containerRef, rect] = useResizeObserver();
-
-	// Ref for tracking drag state
 	const hasDragStartedRef = useRef(false);
 
-	const { data: serverUrl } = useServerUrl();
-	const { data: settings } = useSettings();
-
-	// Track if we've ever connected (to distinguish initial connection from reconnection)
-	const hasConnectedRef = useRef(false);
-
-	// Track previous settings to detect actual changes (for syncing while connected)
-	const prevSettingsRef = useRef(settings);
-
-	// Initial connection: triggered when client and serverUrl are ready
-	// SmallWebRTC handles reconnection internally (3 attempts)
-	useEffect(() => {
-		if (!client || !serverUrl) return;
-
-		client
-			.connect({ webrtcRequestParams: { endpoint: `${serverUrl}/api/offer` } })
-			.catch((error: unknown) => {
-				console.error("[Pipecat] Connection failed:", error);
-			});
-	}, [client, serverUrl]);
+	// Load settings (used for context but not directly in this component)
+	useSettings();
 
 	// TanStack Query hooks
 	const typeTextMutation = useTypeText();
 	const addHistoryEntry = useAddHistoryEntry();
 
-	// Response timeout (10s)
+	// Clear error after 5 seconds
+	const { start: startErrorTimeout, clear: clearErrorTimeout } = useTimeout(
+		() => {
+			setLastError(null);
+		},
+		5000,
+	);
+
+	// Response timeout (30s for transcription)
 	const { start: startResponseTimeout, clear: clearResponseTimeout } =
 		useTimeout(() => {
-			const currentState = useRecordingStore.getState().state;
-			if (currentState === "processing") {
-				handleResponse(); // Reset to idle
+			if (pipelineState === "transcribing") {
+				// Reset to idle on timeout
+				setPipelineState("idle");
+				invoke("pipeline_force_reset").catch(console.error);
 			}
-		}, 10000);
+		}, 30000);
 
-	// Keep store client in sync
+	// Emit connection state changes to other windows
 	useEffect(() => {
-		setClient(client ?? null);
-	}, [client, setClient]);
+		const connectionState = pipelineToConnectionState(pipelineState);
+		tauriAPI.emitConnectionState(connectionState);
+	}, [pipelineState]);
 
-	// Emit connection state changes to other windows (main window)
+	// Poll pipeline state periodically to stay in sync
 	useEffect(() => {
-		const unsubscribe = useRecordingStore.subscribe((newState, prevState) => {
-			if (newState.state !== prevState.state) {
-				tauriAPI.emitConnectionState(newState.state as ConnectionState);
+		const syncState = async () => {
+			try {
+				const state = await invoke<string>("pipeline_get_state");
+				setPipelineState(state as PipelineState);
+			} catch (error) {
+				console.error("[Pipeline] Failed to get state:", error);
 			}
-		});
-		// Emit initial state (get from store directly to avoid dependency issues)
-		const initialState = useRecordingStore.getState().state;
-		tauriAPI.emitConnectionState(initialState as ConnectionState);
-		return unsubscribe;
+		};
+
+		// Initial sync
+		syncState();
+
+		// Poll every 500ms
+		const interval = setInterval(syncState, 500);
+		return () => clearInterval(interval);
 	}, []);
 
-	// Auto-resize window to fit content using Mantine's useResizeObserver
+	// Auto-resize window to fit content
 	useEffect(() => {
 		if (rect.width > 0 && rect.height > 0) {
 			tauriAPI.resizeOverlay(Math.ceil(rect.width), Math.ceil(rect.height));
 		}
 	}, [rect.width, rect.height]);
 
-	// Handle start/stop recording from hotkeys
+	// Start recording using the Rust pipeline
 	const onStartRecording = useCallback(async () => {
-		await startRecording();
-	}, [startRecording]);
+		if (pipelineState !== "idle") return;
 
-	const onStopRecording = useCallback(() => {
-		if (stopRecording()) {
-			startResponseTimeout();
+		// Clear any previous error when starting
+		setLastError(null);
+		clearErrorTimeout();
+
+		try {
+			await invoke("pipeline_start_recording");
+			setPipelineState("recording");
+		} catch (error) {
+			console.error("[Pipeline] Failed to start recording:", error);
+			const errorInfo = parseError(error);
+			setLastError(errorInfo);
+			startErrorTimeout();
 		}
-	}, [stopRecording, startResponseTimeout]);
+	}, [pipelineState, clearErrorTimeout, startErrorTimeout]);
+
+	// Stop recording and transcribe
+	const onStopRecording = useCallback(async () => {
+		if (pipelineState !== "recording") return;
+
+		try {
+			setPipelineState("transcribing");
+			startResponseTimeout();
+
+			const transcript = await invoke<string>("pipeline_stop_and_transcribe");
+			clearResponseTimeout();
+
+			if (transcript) {
+				// Type the transcript
+				try {
+					await typeTextMutation.mutateAsync(transcript);
+				} catch (error) {
+					console.error("[Pipeline] Failed to type text:", error);
+					const errorInfo = parseError(error);
+					setLastError(errorInfo);
+					startErrorTimeout();
+				}
+				// Add to history
+				addHistoryEntry.mutate(transcript);
+			}
+
+			setPipelineState("idle");
+		} catch (error) {
+			console.error("[Pipeline] Failed to stop and transcribe:", error);
+			clearResponseTimeout();
+			setPipelineState("error");
+
+			// Show error to user
+			const errorInfo = parseError(error);
+			setLastError(errorInfo);
+			startErrorTimeout();
+
+			// Attempt to recover
+			setTimeout(async () => {
+				try {
+					await invoke("pipeline_force_reset");
+					setPipelineState("idle");
+				} catch (resetError) {
+					console.error("[Pipeline] Failed to reset:", resetError);
+				}
+			}, 1000);
+		}
+	}, [
+		pipelineState,
+		startResponseTimeout,
+		clearResponseTimeout,
+		typeTextMutation,
+		addHistoryEntry,
+		startErrorTimeout,
+	]);
 
 	// Hotkey event listeners
 	useEffect(() => {
@@ -180,15 +384,54 @@ function RecordingControl() {
 		};
 	}, [onStartRecording, onStopRecording]);
 
-	// Listen for settings changes from main window and invalidate cache to trigger sync
+	// Listen for pipeline events from Rust
+	useEffect(() => {
+		const unlisteners: (() => void)[] = [];
+
+		const setup = async () => {
+			unlisteners.push(
+				await listen("pipeline-recording-started", () => {
+					setPipelineState("recording");
+				}),
+			);
+
+			unlisteners.push(
+				await listen("pipeline-transcription-started", () => {
+					setPipelineState("transcribing");
+				}),
+			);
+
+			unlisteners.push(
+				await listen("pipeline-cancelled", () => {
+					setPipelineState("idle");
+				}),
+			);
+
+			unlisteners.push(
+				await listen("pipeline-reset", () => {
+					setPipelineState("idle");
+				}),
+			);
+		};
+
+		setup();
+
+		return () => {
+			for (const unlisten of unlisteners) {
+				unlisten();
+			}
+		};
+	}, []);
+
+	// Listen for settings changes from main window
 	useEffect(() => {
 		let unlisten: (() => void) | undefined;
 
 		const setup = async () => {
 			unlisten = await tauriAPI.onSettingsChanged(() => {
-				// Invalidate settings query to trigger refetch from Tauri Store
-				// The settings sync useEffect will then detect the change and sync to server
 				queryClient.invalidateQueries({ queryKey: ["settings"] });
+				// Sync pipeline config when settings change
+				invoke("sync_pipeline_config").catch(console.error);
 			});
 		};
 
@@ -199,263 +442,30 @@ function RecordingControl() {
 		};
 	}, [queryClient]);
 
-	// Listen for disconnect request from Rust (triggered on app quit)
-	useEffect(() => {
-		let unlisten: (() => void) | undefined;
-
-		const setup = async () => {
-			unlisten = await listen("request-disconnect", async () => {
-				console.log("[Pipecat] Received disconnect request from Rust");
-				if (client) {
-					try {
-						await client.disconnect();
-						console.log("[Pipecat] Disconnected gracefully");
-					} catch (error) {
-						console.error("[Pipecat] Disconnect error:", error);
-					}
-				}
-			});
-		};
-
-		setup();
-
-		return () => {
-			unlisten?.();
-		};
-	}, [client]);
-
-	// Cleanup on window close/beforeunload
-	useEffect(() => {
-		const handleBeforeUnload = () => {
-			client?.disconnect();
-		};
-		window.addEventListener("beforeunload", handleBeforeUnload);
-		return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-	}, [client]);
-
-	// Connection event handler
-	useRTVIClientEvent(
-		RTVIEvent.Connected,
-		useCallback(() => {
-			console.debug("[Pipecat] Connected");
-			hasConnectedRef.current = true;
-			handleConnected();
-
-			// Sync settings to server via data channel (with delay to ensure connection is stable)
-			setTimeout(() => {
-				if (settings?.cleanup_prompt_sections) {
-					client?.sendClientMessage("set-prompt-sections", {
-						sections: settings.cleanup_prompt_sections,
-					});
-				}
-				if (settings?.stt_provider) {
-					client?.sendClientMessage("set-stt-provider", {
-						provider: settings.stt_provider,
-					});
-				}
-				if (settings?.llm_provider) {
-					client?.sendClientMessage("set-llm-provider", {
-						provider: settings.llm_provider,
-					});
-				}
-			}, 1000);
-		}, [client, settings, handleConnected]),
-	);
-
-	// Sync settings when they change WHILE already connected
-	// Only sends the specific settings that changed, not all of them
-	useEffect(() => {
-		const prevSettings = prevSettingsRef.current;
-		prevSettingsRef.current = settings;
-
-		// Only sync if connected AND settings actually changed
-		if (!client || state !== "idle") return;
-		if (prevSettings === settings) return;
-
-		// Collect only the settings that changed
-		const messages: ConfigMessage[] = [];
-
-		if (
-			settings?.cleanup_prompt_sections != null &&
-			JSON.stringify(settings.cleanup_prompt_sections) !==
-				JSON.stringify(prevSettings?.cleanup_prompt_sections)
-		) {
-			messages.push({
-				type: "set-prompt-sections",
-				data: { sections: settings.cleanup_prompt_sections },
-			});
-		}
-		if (
-			settings?.stt_provider != null &&
-			settings.stt_provider !== prevSettings?.stt_provider
-		) {
-			messages.push({
-				type: "set-stt-provider",
-				data: { provider: settings.stt_provider },
-			});
-		}
-		if (
-			settings?.llm_provider != null &&
-			settings.llm_provider !== prevSettings?.llm_provider
-		) {
-			messages.push({
-				type: "set-llm-provider",
-				data: { provider: settings.llm_provider },
-			});
-		}
-		if (
-			settings?.stt_timeout_seconds != null &&
-			settings.stt_timeout_seconds !== prevSettings?.stt_timeout_seconds
-		) {
-			messages.push({
-				type: "set-stt-timeout",
-				data: { timeout_seconds: settings.stt_timeout_seconds },
-			});
-		}
-
-		// Only send if there are messages (type guard ensures non-empty)
-		if (messages.length > 0) {
-			sendConfigMessages(client, messages as NonEmptyArray<ConfigMessage>);
-		}
-	}, [client, state, settings]);
-
-	// Disconnection event handler
-	// Handles cleanup, state transition, and reconnection
-	useRTVIClientEvent(
-		RTVIEvent.Disconnected,
-		useCallback(() => {
-			console.debug("[Pipecat] Disconnected");
-
-			// Check if we were recording/processing when disconnect happened
-			const currentState = useRecordingStore.getState().state;
-			if (currentState === "recording" || currentState === "processing") {
-				console.warn("[Pipecat] Disconnected during recording/processing");
-				try {
-					client?.enableMic(false);
-					// Also stop the track to release the mic (removes OS mic indicator)
-					const tracks = client?.tracks();
-					if (tracks?.local?.audio) {
-						tracks.local.audio.stop();
-					}
-				} catch {
-					// Ignore errors when cleaning up mic
-				}
-			}
-
-			handleDisconnected();
-
-			// Reconnection: only if we've connected before (not on initial connection failure)
-			// SmallWebRTC already tried to reconnect (3 attempts) and gave up
-			if (hasConnectedRef.current && serverUrl && client) {
-				setTimeout(async () => {
-					try {
-						await client.disconnect(); // Reset client state
-						await client.connect({
-							webrtcRequestParams: { endpoint: `${serverUrl}/api/offer` },
-						});
-					} catch (error: unknown) {
-						console.error("[Pipecat] Reconnection failed:", error);
-					}
-				}, 3000);
-			}
-		}, [client, serverUrl, handleDisconnected]),
-	);
-
-	// Server message handler
-	useRTVIClientEvent(
-		RTVIEvent.ServerMessage,
-		useCallback(
-			async (message: unknown) => {
-				const transcriptResult = TranscriptMessageSchema.safeParse(message);
-				if (transcriptResult.success) {
-					clearResponseTimeout();
-					const { text } = transcriptResult.data;
-					console.debug("[Pipecat] Transcript:", text);
-					try {
-						await typeTextMutation.mutateAsync(text);
-					} catch (error) {
-						console.error("[Pipecat] Failed to type text:", error);
-					}
-					addHistoryEntry.mutate(text);
-					handleResponse();
-					return;
-				}
-
-				const recordingCompleteResult =
-					RecordingCompleteMessageSchema.safeParse(message);
-				if (recordingCompleteResult.success) {
-					clearResponseTimeout();
-					handleResponse();
-					return;
-				}
-
-				// Config response messages - relay to main window for notifications
-				const configUpdatedResult =
-					ConfigUpdatedMessageSchema.safeParse(message);
-				if (configUpdatedResult.success) {
-					tauriAPI.emitConfigResponse({
-						type: "config-updated",
-						setting: configUpdatedResult.data.setting,
-						value: configUpdatedResult.data.value,
-					});
-					return;
-				}
-
-				const configErrorResult = ConfigErrorMessageSchema.safeParse(message);
-				if (configErrorResult.success) {
-					tauriAPI.emitConfigResponse({
-						type: "config-error",
-						setting: configErrorResult.data.setting,
-						error: configErrorResult.data.error,
-					});
-					return;
-				}
-			},
-			[clearResponseTimeout, typeTextMutation, addHistoryEntry, handleResponse],
-		),
-	);
-
-	// Error handlers
-	useRTVIClientEvent(
-		RTVIEvent.Error,
-		useCallback((error: unknown) => {
-			console.error("[Pipecat] Error:", error);
-		}, []),
-	);
-
-	useRTVIClientEvent(
-		RTVIEvent.DeviceError,
-		useCallback((error: unknown) => {
-			console.error("[Pipecat] Device error:", error);
-		}, []),
-	);
-
 	// Click handler (toggle mode)
 	const handleClick = useCallback(() => {
-		if (state === "recording") {
+		if (pipelineState === "recording") {
 			onStopRecording();
-		} else if (state === "idle") {
+		} else if (pipelineState === "idle") {
 			onStartRecording();
 		}
-	}, [state, onStartRecording, onStopRecording]);
+	}, [pipelineState, onStartRecording, onStopRecording]);
 
 	// Drag handler using @use-gesture/react
-	// Handles unfocused window dragging (data-tauri-drag-region doesn't work on unfocused windows)
 	const bindDrag = useDrag(
 		({ movement: [mx, my], first, last, memo }) => {
 			if (first) {
 				hasDragStartedRef.current = false;
-				return false; // memo = false (hasn't started dragging)
+				return false;
 			}
 
 			const distance = Math.sqrt(mx * mx + my * my);
 			const DRAG_THRESHOLD = 5;
 
-			// Start dragging once threshold is exceeded
 			if (!memo && distance > DRAG_THRESHOLD) {
 				hasDragStartedRef.current = true;
 				tauriAPI.startDragging();
-				return true; // memo = true (dragging started)
+				return true;
 			}
 
 			if (last) {
@@ -467,6 +477,42 @@ function RecordingControl() {
 		{ filterTaps: true },
 	);
 
+	const isLoading = pipelineState === "transcribing";
+	const isRecording = pipelineState === "recording";
+	const isError = pipelineState === "error" || lastError !== null;
+
+	// Determine button content
+	const renderButtonContent = () => {
+		if (isLoading) {
+			return <Loader size="sm" color="white" />;
+		}
+		if (isError && lastError) {
+			return (
+				<Tooltip
+					label={lastError.message}
+					position="top"
+					withArrow
+					opened={true}
+					styles={{
+						tooltip: {
+							backgroundColor: "rgba(220, 38, 38, 0.95)",
+							color: "white",
+							fontSize: "12px",
+						},
+					}}
+				>
+					<div style={{ color: "#ef4444" }}>
+						<ErrorIcon />
+					</div>
+				</Tooltip>
+			);
+		}
+		if (isRecording) {
+			return <AudioVisualizer isActive={true} barColor="#eeeeee" />;
+		}
+		return <Logo className="size-5" />;
+	};
+
 	return (
 		<div
 			ref={containerRef}
@@ -475,89 +521,61 @@ function RecordingControl() {
 			style={{
 				width: "fit-content",
 				height: "fit-content",
-				backgroundColor: "rgba(0, 0, 0, 0.9)",
+				backgroundColor: isError
+					? "rgba(127, 29, 29, 0.95)"
+					: "rgba(0, 0, 0, 0.9)",
 				borderRadius: 12,
 				padding: 2,
 				cursor: "grab",
 				userSelect: "none",
+				transition: "background-color 0.2s ease",
 			}}
 		>
-			{state === "processing" ||
-			state === "disconnected" ||
-			state === "connecting" ? (
-				<div
-					style={{
-						width: 48,
-						height: 48,
-						display: "flex",
-						alignItems: "center",
-						justifyContent: "center",
-					}}
-				>
-					<Loader size="sm" color="white" />
-				</div>
-			) : (
-				<UserAudioComponent
-					onClick={handleClick}
-					isMicEnabled={state === "recording"}
-					noIcon={true}
-					noDevicePicker={true}
-					noVisualizer={state !== "recording"}
-					visualizerProps={{
-						barColor: "#eeeeee",
-						backgroundColor: "#000000",
-					}}
-					classNames={{
-						button: "bg-black text-white hover:bg-gray-900",
-					}}
-				>
-					{state !== "recording" && <Logo className="size-5" />}
-				</UserAudioComponent>
-			)}
+			<button
+				type="button"
+				onClick={handleClick}
+				disabled={isLoading}
+				style={{
+					width: 48,
+					height: 48,
+					display: "flex",
+					alignItems: "center",
+					justifyContent: "center",
+					background: "transparent",
+					border: "none",
+					cursor: isLoading ? "wait" : "pointer",
+					borderRadius: 10,
+					position: "relative",
+					opacity: isLoading ? 0.7 : 1,
+				}}
+				className="bg-black text-white hover:bg-gray-900"
+			>
+				{renderButtonContent()}
+			</button>
 		</div>
 	);
 }
 
 export default function OverlayApp() {
-	const [client, setClient] = useState<PipecatClient | null>(null);
-	const [devicesReady, setDevicesReady] = useState(false);
-	const { data: settings } = useSettings();
+	const [ready, setReady] = useState(false);
 
-	// Initial client creation on mount
+	// Sync pipeline config on mount
 	useEffect(() => {
-		const transport = new SmallWebRTCTransport({
-			iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-		});
-		const pipecatClient = new PipecatClient({
-			transport,
-			enableMic: false,
-			enableCam: false,
-		});
-		setClient(pipecatClient);
-
-		pipecatClient
-			.initDevices()
-			.then(() => {
-				setDevicesReady(true);
-			})
-			.catch((error: unknown) => {
-				console.error("[Pipecat] Failed to initialize devices:", error);
-				setDevicesReady(false);
-			});
-
-		return () => {
-			pipecatClient.disconnect().catch(() => {});
+		const init = async () => {
+			try {
+				await invoke("sync_pipeline_config");
+				setReady(true);
+			} catch (error) {
+				console.error("[Overlay] Failed to sync pipeline config:", error);
+				// Still show UI even if sync fails
+				setReady(true);
+			}
 		};
+
+		init();
 	}, []);
 
-	// Apply selected microphone when settings or client changes
-	useEffect(() => {
-		if (client && devicesReady && settings?.selected_mic_id) {
-			client.updateMic(settings.selected_mic_id);
-		}
-	}, [client, devicesReady, settings?.selected_mic_id]);
-
-	if (!client || !devicesReady) {
+	if (!ready) {
 		return (
 			<div
 				className="flex items-center justify-center"
@@ -573,11 +591,5 @@ export default function OverlayApp() {
 		);
 	}
 
-	return (
-		<ThemeProvider>
-			<PipecatClientProvider client={client}>
-				<RecordingControl />
-			</PipecatClientProvider>
-		</ThemeProvider>
-	);
+	return <RecordingControl />;
 }

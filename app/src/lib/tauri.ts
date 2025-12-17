@@ -2,22 +2,17 @@ import { invoke } from "@tauri-apps/api/core";
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Store } from "@tauri-apps/plugin-store";
-import ky from "ky";
 import { z } from "zod";
 
+/**
+ * Connection state for UI display (maps from pipeline state)
+ */
 export type ConnectionState =
 	| "disconnected"
 	| "connecting"
 	| "idle"
 	| "recording"
 	| "processing";
-
-export interface ConfigResponse {
-	type: "config-updated" | "config-error";
-	setting: string;
-	value?: unknown;
-	error?: string;
-}
 
 interface TypeTextResult {
 	success: boolean;
@@ -175,10 +170,6 @@ export const tauriAPI = {
 		} catch (error) {
 			return { success: false, error: String(error) };
 		}
-	},
-
-	async getServerUrl(): Promise<string> {
-		return invoke("get_server_url");
 	},
 
 	async onStartRecording(callback: () => void): Promise<UnlistenFn> {
@@ -361,23 +352,10 @@ export const tauriAPI = {
 			callback();
 		});
 	},
-
-	// Config response sync between windows (overlay -> main)
-	async emitConfigResponse(response: ConfigResponse): Promise<void> {
-		return emit("config-response", response);
-	},
-
-	async onConfigResponse(
-		callback: (response: ConfigResponse) => void,
-	): Promise<UnlistenFn> {
-		return listen<ConfigResponse>("config-response", (event) => {
-			callback(event.payload);
-		});
-	},
 };
 
 // ============================================================================
-// Config API (FastAPI backend) - using ky HTTP client
+// Config API - Using Tauri commands
 // ============================================================================
 
 export interface DefaultSectionsResponse {
@@ -397,22 +375,15 @@ interface AvailableProvidersResponse {
 	llm: ProviderInfo[];
 }
 
-// Create ky instance with sensible defaults for local API
-const api = ky.create({
-	prefixUrl: "http://127.0.0.1:8765",
-	timeout: 10000,
-	retry: {
-		limit: 2,
-		methods: ["get", "post"],
-	},
-});
-
 export const configAPI = {
-	// Static prompt defaults (runtime config goes via data channel)
+	// Default prompt sections (from Tauri)
 	getDefaultSections: () =>
-		api.get("api/prompt/sections/default").json<DefaultSectionsResponse>(),
+		invoke<DefaultSectionsResponse>("get_default_sections"),
 
-	// Available providers (set at server startup)
+	// Available providers (from Tauri, based on configured API keys)
 	getAvailableProviders: () =>
-		api.get("api/providers/available").json<AvailableProvidersResponse>(),
+		invoke<AvailableProvidersResponse>("get_available_providers"),
+
+	// Sync pipeline config when settings change
+	syncPipelineConfig: () => invoke<void>("sync_pipeline_config"),
 };

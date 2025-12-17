@@ -50,6 +50,14 @@ jobs:
         working-directory: app
         run: pnpm install --frozen-lockfile
 
+      - name: TypeScript check
+        working-directory: app
+        run: pnpm typecheck
+
+      - name: Lint check
+        working-directory: app
+        run: pnpm biome check
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -60,6 +68,10 @@ jobs:
         with:
           workspaces: |
             app/src-tauri -> target
+
+      - name: Run Rust tests
+        working-directory: app/src-tauri
+        run: cargo test --lib
 
       - name: Build Tauri app (release)
         working-directory: app

@@ -1,0 +1,251 @@
+//! Tauri commands for the recording pipeline.
+//!
+//! These commands expose the recording pipeline functionality to the frontend,
+//! enabling voice dictation directly from the Tauri app.
+
+use crate::audio_capture::VadAutoStopConfig;
+use crate::pipeline::{PipelineConfig, PipelineError, PipelineState, SharedPipeline};
+use std::time::Duration;
+use tauri::{AppHandle, Emitter, State};
+
+/// Tauri-compatible error type for commands
+#[derive(Debug, serde::Serialize)]
+pub struct CommandError {
+    pub message: String,
+    pub error_type: String,
+}
+
+impl From<PipelineError> for CommandError {
+    fn from(err: PipelineError) -> Self {
+        let error_type = match &err {
+            PipelineError::AudioCapture(_) => "audio",
+            PipelineError::Stt(_) => "stt",
+            PipelineError::Llm(_) => "llm",
+            PipelineError::NoProvider => "config",
+            PipelineError::AlreadyRecording => "state",
+            PipelineError::NotRecording => "state",
+            PipelineError::Config(_) => "config",
+            PipelineError::Lock(_) => "internal",
+            PipelineError::Cancelled => "cancelled",
+            PipelineError::Timeout(_) => "timeout",
+            PipelineError::RecordingTooLarge(_, _) => "size",
+        };
+        Self {
+            message: err.to_string(),
+            error_type: error_type.to_string(),
+        }
+    }
+}
+
+impl From<String> for CommandError {
+    fn from(message: String) -> Self {
+        Self {
+            message,
+            error_type: "unknown".to_string(),
+        }
+    }
+}
+
+/// Start recording audio using the pipeline
+#[tauri::command]
+pub fn pipeline_start_recording(
+    app: AppHandle,
+    pipeline: State<'_, SharedPipeline>,
+) -> Result<(), CommandError> {
+    pipeline.start_recording().map_err(CommandError::from)?;
+
+    // Emit event to frontend
+    let _ = app.emit("pipeline-recording-started", ());
+
+    Ok(())
+}
+
+/// Stop recording and transcribe the audio
+#[tauri::command]
+pub async fn pipeline_stop_and_transcribe(
+    app: AppHandle,
+    pipeline: State<'_, SharedPipeline>,
+) -> Result<String, CommandError> {
+    // Emit transcription started event
+    let _ = app.emit("pipeline-transcription-started", ());
+
+    let transcript = pipeline
+        .stop_and_transcribe()
+        .await
+        .map_err(CommandError::from)?;
+
+    // Emit transcript ready event
+    let _ = app.emit("pipeline-transcript-ready", &transcript);
+
+    Ok(transcript)
+}
+
+/// Cancel the current recording/transcription
+#[tauri::command]
+pub fn pipeline_cancel(
+    app: AppHandle,
+    pipeline: State<'_, SharedPipeline>,
+) -> Result<(), CommandError> {
+    pipeline.cancel();
+
+    // Emit cancelled event
+    let _ = app.emit("pipeline-cancelled", ());
+
+    Ok(())
+}
+
+/// Get the current pipeline state
+#[tauri::command]
+pub fn pipeline_get_state(
+    pipeline: State<'_, SharedPipeline>,
+) -> Result<String, CommandError> {
+    let state = pipeline.state();
+    let state_str = match state {
+        PipelineState::Idle => "idle",
+        PipelineState::Recording => "recording",
+        PipelineState::Transcribing => "transcribing",
+        PipelineState::Error => "error",
+    };
+    Ok(state_str.to_string())
+}
+
+/// Check if the pipeline is currently recording
+#[tauri::command]
+pub fn pipeline_is_recording(
+    pipeline: State<'_, SharedPipeline>,
+) -> Result<bool, CommandError> {
+    Ok(pipeline.is_recording())
+}
+
+/// Configuration payload for updating the pipeline
+#[derive(Debug, serde::Deserialize)]
+pub struct PipelineConfigPayload {
+    pub stt_provider: Option<String>,
+    pub stt_api_key: Option<String>,
+    pub stt_model: Option<String>,
+    pub max_duration_secs: Option<f32>,
+    pub max_retries: Option<u32>,
+    pub vad_enabled: Option<bool>,
+    pub vad_auto_stop: Option<bool>,
+    /// Timeout in seconds for transcription requests
+    pub transcription_timeout_secs: Option<u64>,
+    /// Maximum recording size in bytes
+    pub max_recording_bytes: Option<usize>,
+}
+
+/// Update the pipeline configuration
+#[tauri::command]
+pub fn pipeline_update_config(
+    pipeline: State<'_, SharedPipeline>,
+    config: PipelineConfigPayload,
+) -> Result<(), CommandError> {
+    let mut retry_config = crate::stt::RetryConfig::default();
+    if let Some(max_retries) = config.max_retries {
+        retry_config.max_retries = max_retries;
+    }
+
+    // Build VAD config from payload if any VAD settings provided
+    let vad_config = VadAutoStopConfig {
+        enabled: config.vad_enabled.unwrap_or(false),
+        auto_stop: config.vad_auto_stop.unwrap_or(false),
+        ..VadAutoStopConfig::default()
+    };
+
+    let new_config = PipelineConfig {
+        stt_provider: config.stt_provider.unwrap_or_else(|| "groq".to_string()),
+        stt_api_key: config.stt_api_key.unwrap_or_default(),
+        stt_model: config.stt_model,
+        max_duration_secs: config.max_duration_secs.unwrap_or(300.0),
+        retry_config,
+        vad_config,
+        transcription_timeout: config
+            .transcription_timeout_secs
+            .map(Duration::from_secs)
+            .unwrap_or(Duration::from_secs(60)),
+        max_recording_bytes: config.max_recording_bytes.unwrap_or(50 * 1024 * 1024),
+        llm_config: crate::llm::LlmConfig::default(),
+    };
+
+    pipeline.update_config(new_config).map_err(CommandError::from)?;
+    log::info!("Pipeline configuration updated");
+
+    Ok(())
+}
+
+/// Stop recording, transcribe, and type the result
+/// This is the main end-to-end command for voice dictation
+#[tauri::command]
+pub async fn pipeline_dictate(
+    app: AppHandle,
+    pipeline: State<'_, SharedPipeline>,
+) -> Result<String, CommandError> {
+    // Stop and transcribe
+    let _ = app.emit("pipeline-transcription-started", ());
+
+    let transcript = pipeline
+        .stop_and_transcribe()
+        .await
+        .map_err(CommandError::from)?;
+
+    // Emit transcript ready event
+    let _ = app.emit("pipeline-transcript-ready", &transcript);
+
+    // Type the transcript
+    if !transcript.is_empty() {
+        crate::commands::text::type_text(app.clone(), transcript.clone())
+            .await
+            .map_err(CommandError::from)?;
+    }
+
+    Ok(transcript)
+}
+
+/// Full pipeline helper: Start recording if not recording, or stop and transcribe if recording
+#[tauri::command]
+pub async fn pipeline_toggle(
+    app: AppHandle,
+    pipeline: State<'_, SharedPipeline>,
+) -> Result<String, CommandError> {
+    if pipeline.is_recording() {
+        pipeline_dictate(app, pipeline).await
+    } else {
+        pipeline.start_recording().map_err(CommandError::from)?;
+        let _ = app.emit("pipeline-recording-started", ());
+        Ok(String::new())
+    }
+}
+
+/// Check if the pipeline is in an error state
+#[tauri::command]
+pub fn pipeline_is_error(
+    pipeline: State<'_, SharedPipeline>,
+) -> Result<bool, CommandError> {
+    Ok(pipeline.is_error())
+}
+
+/// Force reset the pipeline state to Idle
+/// Use this to recover from stuck states
+#[tauri::command]
+pub fn pipeline_force_reset(
+    app: AppHandle,
+    pipeline: State<'_, SharedPipeline>,
+) -> Result<(), CommandError> {
+    pipeline.force_reset();
+    log::info!("Pipeline force reset to Idle state");
+
+    // Emit reset event
+    let _ = app.emit("pipeline-reset", ());
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_command_error_from_string() {
+        let error = CommandError::from("test error".to_string());
+        assert_eq!(error.message, "test error");
+    }
+}

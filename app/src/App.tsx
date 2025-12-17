@@ -1,5 +1,4 @@
 import { Kbd, Loader, NavLink, Text, Title, Tooltip } from "@mantine/core";
-import { notifications } from "@mantine/notifications";
 import { Home, Settings } from "lucide-react";
 import { useEffect, useState } from "react";
 import { HistoryFeed } from "./components/HistoryFeed";
@@ -15,16 +14,14 @@ import {
 	DEFAULT_PASTE_LAST_HOTKEY,
 	DEFAULT_TOGGLE_HOTKEY,
 } from "./lib/hotkeyDefaults";
-import { useRefreshServerQueriesOnConnect, useSettings } from "./lib/queries";
-import { type ConfigResponse, type HotkeyConfig, tauriAPI } from "./lib/tauri";
-import { useRecordingStore } from "./stores/recordingStore";
+import { useSettings } from "./lib/queries";
+import { type ConnectionState, type HotkeyConfig, tauriAPI } from "./lib/tauri";
 import "./styles.css";
 
 type View = "home" | "settings";
 
 function ConnectionStatusIndicator() {
-	const state = useRecordingStore((s) => s.state);
-	const setState = useRecordingStore((s) => s.setState);
+	const [state, setState] = useState<ConnectionState>("idle");
 
 	// Listen for connection state changes from the overlay window
 	useEffect(() => {
@@ -41,7 +38,7 @@ function ConnectionStatusIndicator() {
 		return () => {
 			unlisten?.();
 		};
-	}, [setState]);
+	}, []);
 
 	const isConnected =
 		state === "idle" || state === "recording" || state === "processing";
@@ -205,60 +202,8 @@ function SettingsView() {
 	);
 }
 
-function formatSettingName(setting: string): string {
-	const names: Record<string, string> = {
-		"stt-provider": "STT provider",
-		"llm-provider": "LLM provider",
-		"prompt-sections": "Formatting prompt",
-		"stt-timeout": "STT timeout",
-	};
-	return names[setting] ?? setting;
-}
-
 export default function App() {
 	const [activeView, setActiveView] = useState<View>("home");
-	const connectionState = useRecordingStore((s) => s.state);
-
-	// Refresh server-side queries when connection is established
-	useRefreshServerQueriesOnConnect(connectionState);
-
-	// Listen for config response events from overlay window and show notifications
-	useEffect(() => {
-		let isMounted = true;
-		let unlisten: (() => void) | undefined;
-
-		const handleConfigResponse = (response: ConfigResponse) => {
-			if (response.type === "config-updated") {
-				notifications.show({
-					title: "Settings Updated",
-					message: `${formatSettingName(response.setting)} updated successfully`,
-					color: "green",
-					autoClose: 2000,
-				});
-			} else if (response.type === "config-error") {
-				notifications.show({
-					title: "Settings Error",
-					message: `Failed to update ${formatSettingName(response.setting)}: ${response.error}`,
-					color: "red",
-					autoClose: 5000,
-				});
-			}
-		};
-
-		tauriAPI.onConfigResponse(handleConfigResponse).then((fn) => {
-			if (isMounted) {
-				unlisten = fn;
-			} else {
-				// Component unmounted before listener was set up - clean up immediately
-				fn();
-			}
-		});
-
-		return () => {
-			isMounted = false;
-			unlisten?.();
-		};
-	}, []);
 
 	return (
 		<div className="app-layout">
