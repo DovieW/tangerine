@@ -1,5 +1,6 @@
 use arboard::Clipboard;
 use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+use std::sync::{Mutex, OnceLock};
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
@@ -16,6 +17,16 @@ const CLIPBOARD_RESTORE_DELAY_MS: u64 = 100;
 
 const SERVER_URL: &str = "http://127.0.0.1:8765";
 
+/// Global lock to ensure we never run multiple output injections concurrently.
+///
+/// Without this, two overlapping "type/paste" operations can interleave key events and
+/// produce dropped/mangled text in target applications.
+static OUTPUT_INJECTION_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+fn output_injection_lock() -> &'static Mutex<()> {
+    OUTPUT_INJECTION_LOCK.get_or_init(|| Mutex::new(()))
+}
+
 /// Output mode for transcribed text
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum OutputMode {
@@ -26,10 +37,7 @@ pub enum OutputMode {
     PasteAndClipboard,
     /// Just copy to clipboard (no paste)
     Clipboard,
-    /// Type each character as keystrokes
-    Keystrokes,
-    /// Type as keystrokes and also copy to clipboard
-    KeystrokesAndClipboard,
+    // NOTE: Keystrokes mode was removed/disabled due to reliability issues across targets.
 }
 
 impl OutputMode {
@@ -38,8 +46,9 @@ impl OutputMode {
             "paste" => OutputMode::Paste,
             "paste_and_clipboard" => OutputMode::PasteAndClipboard,
             "clipboard" => OutputMode::Clipboard,
-            "keystrokes" => OutputMode::Keystrokes,
-            "keystrokes_and_clipboard" => OutputMode::KeystrokesAndClipboard,
+            // Legacy/disabled values: map to paste so existing settings.json doesn't break.
+            "keystrokes" => OutputMode::Paste,
+            "keystrokes_and_clipboard" => OutputMode::Paste,
             // Handle legacy value
             "auto_paste" => OutputMode::Paste,
             _ => OutputMode::Paste,
@@ -59,6 +68,15 @@ pub async fn type_text(app: AppHandle, text: String) -> Result<(), String> {
     let (tx, rx) = mpsc::channel::<Result<(), String>>();
 
     app.run_on_main_thread(move || {
+        // Serialize output across all modes to avoid interleaving key events.
+        let _guard = match output_injection_lock().lock() {
+            Ok(g) => g,
+            Err(_) => {
+                let _ = tx.send(Err("Output lock poisoned".to_string()));
+                return;
+            }
+        };
+
         let result = type_text_blocking(&text);
         let _ = tx.send(result);
     })
@@ -70,15 +88,14 @@ pub async fn type_text(app: AppHandle, text: String) -> Result<(), String> {
 
 /// Output text based on the specified mode
 pub fn output_text_with_mode(text: &str, mode: OutputMode) -> Result<(), String> {
+    let _guard = output_injection_lock()
+        .lock()
+        .map_err(|_| "Output lock poisoned".to_string())?;
+
     match mode {
         OutputMode::Paste => type_text_blocking(text),
         OutputMode::PasteAndClipboard => paste_and_keep_clipboard(text),
         OutputMode::Clipboard => copy_to_clipboard(text),
-        OutputMode::Keystrokes => type_as_keystrokes(text),
-        OutputMode::KeystrokesAndClipboard => {
-            copy_to_clipboard(text)?;
-            type_as_keystrokes(text)
-        }
     }
 }
 
@@ -125,47 +142,11 @@ pub fn copy_to_clipboard(text: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Type text character by character as keystrokes
-pub fn type_as_keystrokes(text: &str) -> Result<(), String> {
-    // Wait for any modifier keys from the hotkey to be fully released.
-    // This prevents typed characters from combining with Ctrl/Alt/etc.
-    thread::sleep(Duration::from_millis(250));
-
-    let mut enigo = Enigo::new(&Settings::default()).map_err(|e| e.to_string())?;
-
-    // Best-effort: explicitly release common modifiers.
-    // On some platforms the global shortcut key-up may arrive slightly late; releasing here
-    // avoids "shortcut chaos" where characters are treated as Ctrl+... shortcuts.
-    let _ = enigo.key(Key::Control, Direction::Release);
-    let _ = enigo.key(Key::Alt, Direction::Release);
-    let _ = enigo.key(Key::Shift, Direction::Release);
-    let _ = enigo.key(Key::Meta, Direction::Release);
-
-    // Throttle typing to avoid dropped characters in some targets (especially when repeatedly
-    // triggering Output Last Transcription).
-    const CHUNK_CHARS: usize = 24;
-    const CHUNK_DELAY_MS: u64 = 18;
-
-    let mut buf = String::with_capacity(CHUNK_CHARS * 2);
-    let mut count = 0usize;
-    for ch in text.chars() {
-        buf.push(ch);
-        count += 1;
-
-        if count >= CHUNK_CHARS {
-            enigo.text(&buf).map_err(|e| e.to_string())?;
-            buf.clear();
-            count = 0;
-            thread::sleep(Duration::from_millis(CHUNK_DELAY_MS));
-        }
-    }
-
-    if !buf.is_empty() {
-        enigo.text(&buf).map_err(|e| e.to_string())?;
-    }
-
-    log::info!("Typed {} chars as keystrokes", text.len());
-    Ok(())
+// Keystrokes mode intentionally disabled.
+// (Kept as a stub in case any legacy call sites remain in downstream forks.)
+#[allow(dead_code)]
+pub fn type_as_keystrokes(_text: &str) -> Result<(), String> {
+    Err("Keystrokes output mode is disabled".to_string())
 }
 
 /// Type text using clipboard and paste. Used internally by shortcut handlers.

@@ -61,9 +61,19 @@ export type WidgetPosition =
 export type OutputMode =
 	| "paste"
 	| "paste_and_clipboard"
-	| "clipboard"
-	| "keystrokes"
-	| "keystrokes_and_clipboard";
+	| "clipboard";
+
+function normalizeOutputMode(value: unknown): OutputMode {
+	if (value === "paste" || value === "paste_and_clipboard" || value === "clipboard") {
+		return value;
+	}
+
+	// Legacy/disabled values:
+	// - "keystrokes"
+	// - "keystrokes_and_clipboard"
+	// - "auto_paste"
+	return "paste";
+}
 
 export interface AppSettings {
 	toggle_hotkey: HotkeyConfig;
@@ -231,7 +241,7 @@ export const tauriAPI = {
 			overlay_mode: (await store.get<OverlayMode>("overlay_mode")) ?? "always",
 			widget_position:
 				(await store.get<WidgetPosition>("widget_position")) ?? "bottom-right",
-			output_mode: (await store.get<OutputMode>("output_mode")) ?? "paste",
+			output_mode: normalizeOutputMode(await store.get("output_mode")),
 		};
 	},
 

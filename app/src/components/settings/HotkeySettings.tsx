@@ -119,8 +119,8 @@ export function HotkeySettings() {
 
 			<div style={{ marginTop: 20 }}>
 				<HotkeyInput
-					label="Output Last Transcription"
-					description="Output last transcription based on output setting"
+					label="Paste Last Transcription"
+					description="Paste your last result"
 					value={settings?.paste_last_hotkey ?? DEFAULT_PASTE_LAST_HOTKEY}
 					onChange={handlePasteLastHotkeyChange}
 					disabled={isLoading || updatePasteLastHotkey.isPending}
