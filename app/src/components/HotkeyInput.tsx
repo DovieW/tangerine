@@ -18,6 +18,31 @@ interface HotkeyInputProps {
 // Known modifier keys (lowercase, as returned by react-hotkeys-hook)
 const MODIFIER_KEYS = new Set(["ctrl", "alt", "shift", "meta", "mod"]);
 
+// Keys that can be used alone without modifiers (function keys, etc.)
+const STANDALONE_KEYS = new Set([
+	"f1",
+	"f2",
+	"f3",
+	"f4",
+	"f5",
+	"f6",
+	"f7",
+	"f8",
+	"f9",
+	"f10",
+	"f11",
+	"f12",
+	"insert",
+	"delete",
+	"home",
+	"end",
+	"pageup",
+	"pagedown",
+	"scrolllock",
+	"pause",
+	"printscreen",
+]);
+
 /**
  * Map from react-hotkeys-hook key names to Tauri shortcut key names.
  * react-hotkeys-hook returns lowercase keys, Tauri expects specific formats.
@@ -139,7 +164,15 @@ function keysToConfig(keys: Set<string>): HotkeyConfig | null {
 		}
 	}
 
-	// Require at least one modifier and exactly one main key
+	// Allow standalone keys (like F3) without modifiers
+	if (mainKey !== null && STANDALONE_KEYS.has(mainKey.toLowerCase())) {
+		return {
+			modifiers,
+			key: formatKeyForTauri(mainKey),
+		};
+	}
+
+	// For other keys, require at least one modifier
 	if (modifiers.length === 0 || mainKey === null) {
 		return null;
 	}
@@ -271,12 +304,12 @@ export function HotkeyInput({
 										marginLeft: 4,
 									}}
 								>
-									+ key
+									release to save
 								</span>
 							</>
 						) : (
 							<span style={{ color: "var(--accent-primary)", fontSize: 14 }}>
-								Press a key combination...
+								Press a key or combination...
 							</span>
 						)}
 						<span

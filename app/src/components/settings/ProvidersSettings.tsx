@@ -1,4 +1,4 @@
-import { Badge, Loader, Select, Slider, Text } from "@mantine/core";
+import { Loader, Select, Slider, Text } from "@mantine/core";
 import { useEffect, useState } from "react";
 import {
 	useAvailableProviders,
@@ -163,16 +163,6 @@ export function ProvidersSettings() {
 		{ group: "Local", items: llmLocalProviders },
 	];
 
-	// Determine if currently selected provider is local
-	const selectedSttProvider = availableProviders?.stt.find(
-		(p) => p.value === settings?.stt_provider,
-	);
-	const selectedLlmProvider = availableProviders?.llm.find(
-		(p) => p.value === settings?.llm_provider,
-	);
-	const isSttProviderLocal = selectedSttProvider?.is_local ?? false;
-	const isLlmProviderLocal = selectedLlmProvider?.is_local ?? false;
-
 	// Get available models for the selected providers
 	const sttModelOptions = settings?.stt_provider
 		? (STT_MODELS[settings.stt_provider] ?? [])
@@ -197,34 +187,24 @@ export function ProvidersSettings() {
 						{isLoadingProviderData ? (
 							<Loader size="sm" color="gray" />
 						) : (
-							<>
-								<Select
-									data={sttProviderOptions}
-									value={settings?.stt_provider ?? null}
-									onChange={handleSTTProviderChange}
-									placeholder="Select provider"
-									disabled={
-										sttCloudProviders.length === 0 &&
-										sttLocalProviders.length === 0
-									}
-									styles={{
-										input: {
-											backgroundColor: "var(--bg-elevated)",
-											borderColor: "var(--border-default)",
-											color: "var(--text-primary)",
-										},
-									}}
-								/>
-								{settings?.stt_provider && (
-									<Badge
-										size="xs"
-										variant="light"
-										color={isSttProviderLocal ? "teal" : "blue"}
-									>
-										{isSttProviderLocal ? "Local" : "Cloud"}
-									</Badge>
-								)}
-							</>
+							<Select
+								data={sttProviderOptions}
+								value={settings?.stt_provider ?? null}
+								onChange={handleSTTProviderChange}
+								placeholder="Select provider"
+								disabled={
+									sttCloudProviders.length === 0 &&
+									sttLocalProviders.length === 0
+								}
+								styles={{
+									input: {
+										backgroundColor: "var(--bg-elevated)",
+										borderColor: "var(--border-default)",
+										color: "var(--text-primary)",
+										minWidth: 200,
+									},
+								}}
+							/>
 						)}
 					</div>
 				</div>
@@ -238,21 +218,20 @@ export function ProvidersSettings() {
 								Model to use for transcription
 							</p>
 						</div>
-						<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-							<Select
-								data={sttModelOptions}
-								value={settings?.stt_model ?? sttModelOptions[0]?.value ?? null}
-								onChange={handleSTTModelChange}
-								placeholder="Select model"
-								styles={{
-									input: {
-										backgroundColor: "var(--bg-elevated)",
-										borderColor: "var(--border-default)",
-										color: "var(--text-primary)",
-									},
-								}}
-							/>
-						</div>
+						<Select
+							data={sttModelOptions}
+							value={settings?.stt_model ?? sttModelOptions[0]?.value ?? null}
+							onChange={handleSTTModelChange}
+							placeholder="Select model"
+							styles={{
+								input: {
+									backgroundColor: "var(--bg-elevated)",
+									borderColor: "var(--border-default)",
+									color: "var(--text-primary)",
+									minWidth: 200,
+								},
+							}}
+						/>
 					</div>
 				)}
 
@@ -268,34 +247,24 @@ export function ProvidersSettings() {
 						{isLoadingProviderData ? (
 							<Loader size="sm" color="gray" />
 						) : (
-							<>
-								<Select
-									data={llmProviderOptions}
-									value={settings?.llm_provider ?? null}
-									onChange={handleLLMProviderChange}
-									placeholder="Select provider"
-									disabled={
-										llmCloudProviders.length === 0 &&
-										llmLocalProviders.length === 0
-									}
-									styles={{
-										input: {
-											backgroundColor: "var(--bg-elevated)",
-											borderColor: "var(--border-default)",
-											color: "var(--text-primary)",
-										},
-									}}
-								/>
-								{settings?.llm_provider && (
-									<Badge
-										size="xs"
-										variant="light"
-										color={isLlmProviderLocal ? "teal" : "blue"}
-									>
-										{isLlmProviderLocal ? "Local" : "Cloud"}
-									</Badge>
-								)}
-							</>
+							<Select
+								data={llmProviderOptions}
+								value={settings?.llm_provider ?? null}
+								onChange={handleLLMProviderChange}
+								placeholder="Select provider"
+								disabled={
+									llmCloudProviders.length === 0 &&
+									llmLocalProviders.length === 0
+								}
+								styles={{
+									input: {
+										backgroundColor: "var(--bg-elevated)",
+										borderColor: "var(--border-default)",
+										color: "var(--text-primary)",
+										minWidth: 200,
+									},
+								}}
+							/>
 						)}
 					</div>
 				</div>
@@ -309,21 +278,20 @@ export function ProvidersSettings() {
 								Model to use for text formatting
 							</p>
 						</div>
-						<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-							<Select
-								data={llmModelOptions}
-								value={settings?.llm_model ?? llmModelOptions[0]?.value ?? null}
-								onChange={handleLLMModelChange}
-								placeholder="Select model"
-								styles={{
-									input: {
-										backgroundColor: "var(--bg-elevated)",
-										borderColor: "var(--border-default)",
-										color: "var(--text-primary)",
-									},
-								}}
-							/>
-						</div>
+						<Select
+							data={llmModelOptions}
+							value={settings?.llm_model ?? llmModelOptions[0]?.value ?? null}
+							onChange={handleLLMModelChange}
+							placeholder="Select model"
+							styles={{
+								input: {
+									backgroundColor: "var(--bg-elevated)",
+									borderColor: "var(--border-default)",
+									color: "var(--text-primary)",
+									minWidth: 200,
+								},
+							}}
+						/>
 					</div>
 				)}
 
