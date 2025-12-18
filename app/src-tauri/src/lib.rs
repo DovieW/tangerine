@@ -24,6 +24,7 @@ mod tests;
 
 use audio_mute::AudioMuteManager;
 use history::HistoryStorage;
+use request_log::RequestLogStore;
 use settings::HotkeyConfig;
 use state::AppState;
 
@@ -182,6 +183,21 @@ fn start_recording(
             let _ = app.emit("pipeline-error", error_msg);
             return;
         }
+
+        // Pipeline started successfully - now start request logging.
+        if let Some(log_store) = app.try_state::<RequestLogStore>() {
+            let config = pipeline.config();
+            log_store.start_request(config.stt_provider.clone(), config.stt_model.clone());
+            log_store.with_current(|log| {
+                log.llm_provider = if config.llm_config.enabled {
+                    Some(config.llm_config.provider.clone())
+                } else {
+                    None
+                };
+                log.llm_model = config.llm_config.model.clone();
+                log.info(format!("Recording started ({})", source));
+            });
+        }
     }
 
     // Pipeline started successfully - now update state and do side effects
@@ -252,12 +268,43 @@ fn stop_recording(
         let overlay_mode_clone = overlay_mode.clone();
         tauri::async_runtime::spawn(async move {
             let _ = app_clone.emit("pipeline-transcription-started", ());
+
+            // Log transcription start for this request
+            if let Some(log_store) = app_clone.try_state::<RequestLogStore>() {
+                log_store.with_current(|log| {
+                    log.info("Recording stopped, starting transcription");
+                });
+            }
+
+            let stt_start = std::time::Instant::now();
             match pipeline_clone.stop_and_transcribe().await {
                 Ok(transcript) => {
+                    let stt_duration = stt_start.elapsed();
                     log::info!("Transcription complete: {} chars", transcript.len());
 
                     // Filter out Whisper hallucinations
                     let filtered_transcript = filter_whisper_hallucinations(&transcript);
+
+                    // Update request log store (always keep the raw transcript)
+                    if let Some(log_store) = app_clone.try_state::<RequestLogStore>() {
+                        log_store.with_current(|log| {
+                            log.raw_transcript = Some(transcript.clone());
+                            log.stt_duration_ms = Some(stt_duration.as_millis() as u64);
+
+                            if let Some(ref text) = filtered_transcript {
+                                // No LLM formatting in this path; treat final text as the filtered output
+                                log.formatted_transcript = Some(text.clone());
+                            }
+
+                            log.info(format!(
+                                "Transcription completed in {}ms ({} chars)",
+                                stt_duration.as_millis(),
+                                transcript.len()
+                            ));
+                            log.complete_success();
+                        });
+                        log_store.complete_current();
+                    }
 
                     if let Some(ref text) = filtered_transcript {
                         let _ = app_clone.emit("pipeline-transcript-ready", text);
@@ -265,6 +312,12 @@ fn stop_recording(
                         // Output the transcript based on mode
                         if let Err(e) = commands::text::output_text_with_mode(text, output_mode) {
                             log::error!("Failed to output transcript: {}", e);
+
+                            if let Some(log_store) = app_clone.try_state::<RequestLogStore>() {
+                                log_store.with_current(|log| {
+                                    log.warn(format!("Output failed: {}", e));
+                                });
+                            }
                         }
 
                         // Save to history
@@ -277,6 +330,12 @@ fn stop_recording(
                         // Emit empty transcript event so UI can update appropriately
                         let _ = app_clone.emit("pipeline-transcript-ready", "");
                         log::info!("Transcript filtered as hallucination, not outputting");
+
+                        if let Some(log_store) = app_clone.try_state::<RequestLogStore>() {
+                            log_store.with_current(|log| {
+                                log.warn("Transcript filtered as hallucination, nothing output");
+                            });
+                        }
                     }
 
                     // Hide overlay after transcription completes if in "recording_only" mode
@@ -289,6 +348,14 @@ fn stop_recording(
                 Err(e) => {
                     log::error!("Transcription failed: {}", e);
                     let _ = app_clone.emit("pipeline-error", e.to_string());
+
+                    if let Some(log_store) = app_clone.try_state::<RequestLogStore>() {
+                        log_store.with_current(|log| {
+                            log.error(format!("Transcription failed: {}", e));
+                            log.complete_error(e.to_string());
+                        });
+                        log_store.complete_current();
+                    }
 
                     // Hide overlay even on error if in "recording_only" mode
                     if overlay_mode_clone == "recording_only" {

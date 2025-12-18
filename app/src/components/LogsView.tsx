@@ -354,134 +354,148 @@ export function LogsView() {
 	}, []);
 
 	return (
-		<Stack gap="md" p="md">
-			<Group justify="space-between" align="center">
-				<Title order={3}>Request Logs</Title>
-				<Group gap="xs">
-					<Tooltip label="Refresh logs">
-						<ActionIcon
-							variant="subtle"
-							onClick={() => refetch()}
-							loading={isRefetching}
-						>
-							<RefreshCw size={18} />
-						</ActionIcon>
-					</Tooltip>
-					<Button
-						variant="subtle"
-						color="red"
-						size="xs"
-						leftSection={<Trash2 size={14} />}
-						onClick={() => clearLogsMutation.mutate()}
-						loading={clearLogsMutation.isPending}
-						disabled={!logs || logs.length === 0}
-					>
-						Clear All
-					</Button>
-				</Group>
-			</Group>
+    <Stack gap="md" style={{ width: "100%" }}>
+      <Group justify="space-between" align="center">
+        <Title order={3}>Request Logs</Title>
+        <Group gap="xs">
+          <Tooltip label="Refresh logs">
+            <ActionIcon
+              variant="subtle"
+              onClick={() => refetch()}
+              loading={isRefetching}
+            >
+              <RefreshCw size={18} />
+            </ActionIcon>
+          </Tooltip>
+          <Button
+            variant="subtle"
+            color="red"
+            size="xs"
+            leftSection={<Trash2 size={14} />}
+            onClick={() => clearLogsMutation.mutate()}
+            loading={clearLogsMutation.isPending}
+            disabled={!logs || logs.length === 0}
+          >
+            Clear All
+          </Button>
+        </Group>
+      </Group>
 
-			<Text size="sm" c="dimmed">
-				View detailed logs of voice transcription requests. Logs are stored in
-				memory and cleared on app restart.
-			</Text>
+      <Text size="sm" c="dimmed">
+        View detailed logs of voice transcription requests. Logs are stored in
+        memory and cleared on app restart.
+      </Text>
 
-			{/* System Events Panel */}
-			{systemEvents.length > 0 && (
-				<Paper
-					withBorder
-					p="sm"
-					style={{ background: "var(--mantine-color-dark-8)" }}
-				>
-					<Group justify="space-between" mb="xs">
-						<Group gap="xs">
-							<Zap
-								size={16}
-								style={{ color: "var(--mantine-color-yellow-5)" }}
-							/>
-							<Text size="sm" fw={600}>
-								System Events (Live)
-							</Text>
-						</Group>
-						<Group gap="xs">
-							<CopyButton value={JSON.stringify(systemEvents, null, 2)}>
-								{({ copied, copy }) => (
-									<Button
-										variant="subtle"
-										color={copied ? "teal" : "gray"}
-										size="xs"
-										leftSection={<Copy size={12} />}
-										onClick={copy}
-									>
-										{copied ? "Copied!" : "Copy All"}
-									</Button>
-								)}
-							</CopyButton>
-							<Button
-								variant="subtle"
-								color="gray"
-								size="xs"
-								onClick={() => setSystemEvents([])}
-							>
-								Clear
-							</Button>
-						</Group>
-					</Group>
-					<Stack gap={4} style={{ maxHeight: 200, overflowY: "auto" }}>
-						{systemEvents.map((event, idx) => (
-							<Group
-								key={`${event.timestamp}-${idx}`}
-								gap="xs"
-								wrap="nowrap"
-								align="flex-start"
-							>
-								<Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
-									{new Date(event.timestamp).toLocaleTimeString()}
-								</Text>
-								<Badge
-									size="xs"
-									color={
-										event.event_type === "error"
-											? "red"
-											: event.event_type === "shortcut"
-												? "blue"
-												: "gray"
-									}
-								>
-									{event.event_type}
-								</Badge>
-								<Text size="xs" style={{ flex: 1 }}>
-									{event.message}
-									{event.details && (
-										<Text span c="dimmed" size="xs">
-											{" "}
-											- {event.details}
-										</Text>
-									)}
-								</Text>
-							</Group>
-						))}
-					</Stack>
-				</Paper>
-			)}
+      {/* System Events Panel */}
+      {systemEvents.length > 0 && (
+        <Paper
+          withBorder
+          p="sm"
+          style={{ background: "var(--mantine-color-dark-8)" }}
+        >
+          <Group justify="space-between" mb="xs">
+            <Group gap="xs">
+              <Zap
+                size={16}
+                style={{ color: "var(--mantine-color-yellow-5)" }}
+              />
+              <Text size="sm" fw={600}>
+                System Events (Live)
+              </Text>
+            </Group>
+            <Group gap="xs">
+              <CopyButton value={JSON.stringify(systemEvents, null, 2)}>
+                {({ copied, copy }) => (
+                  <Button
+                    variant="subtle"
+                    color={copied ? "teal" : "gray"}
+                    size="xs"
+                    leftSection={<Copy size={12} />}
+                    onClick={copy}
+                  >
+                    {copied ? "Copied!" : "Copy All"}
+                  </Button>
+                )}
+              </CopyButton>
+              <Button
+                variant="subtle"
+                color="gray"
+                size="xs"
+                onClick={() => setSystemEvents([])}
+              >
+                Clear
+              </Button>
+            </Group>
+          </Group>
+          <Stack gap={4} style={{ maxHeight: 200, overflowY: "auto" }}>
+            {systemEvents.map((event, idx) => (
+              <Group
+                key={`${event.timestamp}-${idx}`}
+                gap="xs"
+                wrap="nowrap"
+                align="flex-start"
+              >
+                <Text
+                  size="xs"
+                  c="dimmed"
+                  ff="monospace"
+                  style={{
+                    whiteSpace: "nowrap",
+                    minWidth: 92,
+                    textAlign: "right",
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {new Date(event.timestamp).toLocaleTimeString(undefined, {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  })}
+                </Text>
+                <Badge
+                  size="xs"
+                  color={
+                    event.event_type === "error"
+                      ? "red"
+                      : event.event_type === "shortcut"
+                      ? "blue"
+                      : "gray"
+                  }
+                >
+                  {event.event_type}
+                </Badge>
+                <Text size="xs" style={{ flex: 1 }}>
+                  {event.message}
+                  {event.details && (
+                    <Text span c="dimmed" size="xs">
+                      {" "}
+                      - {event.details}
+                    </Text>
+                  )}
+                </Text>
+              </Group>
+            ))}
+          </Stack>
+        </Paper>
+      )}
 
-			{logs && logs.length > 0 ? (
-				<Accordion variant="contained" radius="md" chevronPosition="left">
-					{logs.map((log) => (
-						<RequestLogItem key={log.id} log={log} />
-					))}
-				</Accordion>
-			) : (
-				<Paper withBorder p="xl" ta="center">
-					<Info
-						size={32}
-						style={{ color: "var(--mantine-color-dimmed)", margin: "0 auto" }}
-					/>
-					<Text size="sm" c="dimmed" mt="sm">
-						No request logs yet. Start a voice transcription to see logs here.
-					</Text>
-				</Paper>
-			)}
-		</Stack>
-	);
+      {logs && logs.length > 0 ? (
+        <Accordion variant="contained" radius="md" chevronPosition="left">
+          {logs.map((log) => (
+            <RequestLogItem key={log.id} log={log} />
+          ))}
+        </Accordion>
+      ) : (
+        <Paper withBorder p="xl" ta="center">
+          <Info
+            size={32}
+            style={{ color: "var(--mantine-color-dimmed)", margin: "0 auto" }}
+          />
+          <Text size="sm" c="dimmed" mt="sm">
+            No request logs yet. Start a voice transcription to see logs here.
+          </Text>
+        </Paper>
+      )}
+    </Stack>
+  );
 }

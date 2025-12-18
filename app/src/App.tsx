@@ -253,7 +253,11 @@ export default function App() {
 			case "settings":
 				return <SettingsView />;
 			case "logs":
-				return <LogsView />;
+				return (
+          <div className="main-content">
+            <LogsView />
+          </div>
+        );
 			default:
 				return <HomeView />;
 		}
