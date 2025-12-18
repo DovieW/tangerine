@@ -15,7 +15,7 @@ const KEY_EVENT_DELAY_MS: u64 = 50;
 const CLIPBOARD_RESTORE_DELAY_MS: u64 = 100;
 
 /// Delay between keystrokes when typing character by character
-const KEYSTROKE_DELAY_MS: u64 = 5;
+const KEYSTROKE_DELAY_MS: u64 = 12;
 
 const SERVER_URL: &str = "http://127.0.0.1:8765";
 
@@ -132,25 +132,25 @@ pub fn copy_to_clipboard(text: &str) -> Result<(), String> {
 pub fn type_as_keystrokes(text: &str) -> Result<(), String> {
     let mut enigo = Enigo::new(&Settings::default()).map_err(|e| e.to_string())?;
 
-    // Small initial delay to ensure the target application is ready
-    thread::sleep(Duration::from_millis(50));
+    // Longer initial delay to ensure the target application is ready
+    thread::sleep(Duration::from_millis(150));
 
     for c in text.chars() {
         // Handle special characters
         match c {
             '\n' => {
                 enigo.key(Key::Return, Direction::Press).map_err(|e| e.to_string())?;
-                thread::sleep(Duration::from_millis(2));
+                thread::sleep(Duration::from_millis(8));
                 enigo.key(Key::Return, Direction::Release).map_err(|e| e.to_string())?;
             }
             '\t' => {
                 enigo.key(Key::Tab, Direction::Press).map_err(|e| e.to_string())?;
-                thread::sleep(Duration::from_millis(2));
+                thread::sleep(Duration::from_millis(8));
                 enigo.key(Key::Tab, Direction::Release).map_err(|e| e.to_string())?;
             }
             _ => {
                 enigo.key(Key::Unicode(c), Direction::Press).map_err(|e| e.to_string())?;
-                thread::sleep(Duration::from_millis(2));
+                thread::sleep(Duration::from_millis(8));
                 enigo.key(Key::Unicode(c), Direction::Release).map_err(|e| e.to_string())?;
             }
         }

@@ -357,6 +357,16 @@ body {
 	border-bottom: 2px solid var(--accent-primary);
 }
 
+/* Disable tab panel animation */
+.settings-tabs .mantine-Tabs-panel {
+	animation: none !important;
+}
+
+/* Hide checkmarks in Select dropdowns globally */
+.mantine-Select-option svg {
+	display: none;
+}
+
 .settings-section {
 	margin-bottom: 32px;
 }
@@ -380,7 +390,8 @@ body {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	padding: 12px 0;
+	padding: 16px 0;
+	min-height: 72px;
 	border-bottom: 1px solid var(--border-subtle);
 }
 

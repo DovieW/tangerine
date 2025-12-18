@@ -443,7 +443,7 @@ pub fn handle_shortcut_event(app: &AppHandle, shortcut: &Shortcut, event: &Short
             }
         }
     } else if is_paste_last {
-        // Paste last transcription: hold-to-paste (paste happens on release)
+        // Output last transcription: hold-to-output (output happens on release)
         match event.state {
             ShortcutState::Pressed => {
                 // Mark key as held (ignore OS key repeat)
@@ -451,17 +451,22 @@ pub fn handle_shortcut_event(app: &AppHandle, shortcut: &Shortcut, event: &Short
             }
             ShortcutState::Released => {
                 if state.paste_key_held.swap(false, Ordering::SeqCst) {
-                    // Key released - do the paste
-                    log::info!("PasteLast: pasting last transcription");
+                    // Key released - output based on configured mode
+                    log::info!("OutputLast: outputting last transcription");
+
+                    // Get output mode from settings
+                    let output_mode_str: String = get_setting_from_store(app, "output_mode", "paste".to_string());
+                    let output_mode = commands::text::OutputMode::from_str(&output_mode_str);
+
                     let history_storage = app.state::<HistoryStorage>();
 
                     if let Ok(entries) = history_storage.get_all(Some(1)) {
                         if let Some(entry) = entries.first() {
-                            if let Err(e) = commands::text::type_text_blocking(&entry.text) {
-                                log::error!("Failed to paste last transcription: {}", e);
+                            if let Err(e) = commands::text::output_text_with_mode(&entry.text, output_mode) {
+                                log::error!("Failed to output last transcription: {}", e);
                             }
                         } else {
-                            log::info!("PasteLast: no history entries available");
+                            log::info!("OutputLast: no history entries available");
                         }
                     }
                 }
