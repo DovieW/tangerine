@@ -556,10 +556,16 @@ body {
 	border-radius: 50%;
 }
 
-.connection-status-dot.disconnected {
-	background-color: #ef4444;
+.connection-status-dot.idle,
+.connection-status-dot.recording {
+	background-color: #22c55e;
 }
 
-.connection-status-dot.connected {
-	background-color: #22c55e;
+.connection-status-dot.processing,
+.connection-status-dot.connecting {
+	background-color: #f59e0b;
+}
+
+.connection-status-dot.disconnected {
+	background-color: #ef4444;
 }

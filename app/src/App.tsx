@@ -42,20 +42,28 @@ function ConnectionStatusIndicator() {
 		};
 	}, []);
 
-	const isReady =
-		state === "idle" || state === "recording" || state === "processing";
-
-	const statusText = isReady ? "Ready" : "Initializing...";
+	const statusText: string = (() => {
+    switch (state) {
+      case "idle":
+        return "Ready";
+      case "recording":
+        return "Recording";
+      case "processing":
+        return "Processing...";
+      case "connecting":
+        return "Connecting...";
+      case "disconnected":
+        return "Disconnected";
+    }
+  })();
 
 	return (
-		<Tooltip label={statusText} position="right" withArrow>
-			<div className="connection-status">
-				<span
-					className={`connection-status-dot ${isReady ? "connected" : "disconnected"}`}
-				/>
-			</div>
-		</Tooltip>
-	);
+    <Tooltip label={statusText} position="right" withArrow>
+      <div className="connection-status">
+        <span className={`connection-status-dot ${state}`} />
+      </div>
+    </Tooltip>
+  );
 }
 
 function Sidebar({
