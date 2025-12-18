@@ -1,8 +1,9 @@
 import { Kbd, Loader, NavLink, Text, Title, Tooltip } from "@mantine/core";
-import { Home, Settings } from "lucide-react";
+import { FileText, Home, Settings } from "lucide-react";
 import { useEffect, useState } from "react";
 import { HistoryFeed } from "./components/HistoryFeed";
 import { Logo } from "./components/Logo";
+import { LogsView } from "./components/LogsView";
 import {
 	ApiKeysSettings,
 	AudioSettings,
@@ -19,7 +20,7 @@ import { useSettings } from "./lib/queries";
 import { type ConnectionState, type HotkeyConfig, tauriAPI } from "./lib/tauri";
 import "./styles.css";
 
-type View = "home" | "settings";
+type View = "home" | "settings" | "logs";
 
 function ConnectionStatusIndicator() {
 	const [state, setState] = useState<ConnectionState>("idle");
@@ -96,6 +97,15 @@ function Sidebar({
 						leftSection={<Settings size={20} />}
 						active={activeView === "settings"}
 						onClick={() => onViewChange("settings")}
+						variant="filled"
+						className="sidebar-nav-link"
+					/>
+				</Tooltip>
+				<Tooltip label="Logs" position="right" withArrow>
+					<NavLink
+						leftSection={<FileText size={20} />}
+						active={activeView === "logs"}
+						onClick={() => onViewChange("logs")}
 						variant="filled"
 						className="sidebar-nav-link"
 					/>
@@ -207,10 +217,23 @@ function SettingsView() {
 export default function App() {
 	const [activeView, setActiveView] = useState<View>("home");
 
+	const renderView = () => {
+		switch (activeView) {
+			case "home":
+				return <HomeView />;
+			case "settings":
+				return <SettingsView />;
+			case "logs":
+				return <LogsView />;
+			default:
+				return <HomeView />;
+		}
+	};
+
 	return (
 		<div className="app-layout">
 			<Sidebar activeView={activeView} onViewChange={setActiveView} />
-			{activeView === "home" ? <HomeView /> : <SettingsView />}
+			{renderView()}
 		</div>
 	);
 }

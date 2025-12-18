@@ -5,8 +5,9 @@
 
 use crate::audio_capture::VadAutoStopConfig;
 use crate::pipeline::{PipelineConfig, PipelineError, PipelineState, SharedPipeline};
-use std::time::Duration;
-use tauri::{AppHandle, Emitter, State};
+use crate::request_log::RequestLogStore;
+use std::time::{Duration, Instant};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 /// Tauri-compatible error type for commands
 #[derive(Debug, serde::Serialize)]
@@ -52,7 +53,34 @@ pub fn pipeline_start_recording(
     app: AppHandle,
     pipeline: State<'_, SharedPipeline>,
 ) -> Result<(), CommandError> {
-    pipeline.start_recording().map_err(CommandError::from)?;
+    // Start request logging
+    if let Some(log_store) = app.try_state::<RequestLogStore>() {
+        let config = pipeline.config();
+        log_store.start_request(
+            config.stt_provider.clone(),
+            config.stt_model.clone(),
+        );
+        log_store.with_current(|log| {
+            log.llm_provider = if config.llm_config.enabled {
+                Some(config.llm_config.provider.clone())
+            } else {
+                None
+            };
+            log.llm_model = config.llm_config.model.clone();
+            log.info("Recording started");
+        });
+    }
+
+    pipeline.start_recording().map_err(|e| {
+        if let Some(log_store) = app.try_state::<RequestLogStore>() {
+            log_store.with_current(|log| {
+                log.error(format!("Failed to start recording: {}", e));
+                log.complete_error(e.to_string());
+            });
+            log_store.complete_current();
+        }
+        CommandError::from(e)
+    })?;
 
     // Emit event to frontend
     let _ = app.emit("pipeline-recording-started", ());
@@ -69,10 +97,44 @@ pub async fn pipeline_stop_and_transcribe(
     // Emit transcription started event
     let _ = app.emit("pipeline-transcription-started", ());
 
+    // Log transcription start
+    if let Some(log_store) = app.try_state::<RequestLogStore>() {
+        log_store.with_current(|log| {
+            log.info("Recording stopped, starting transcription");
+        });
+    }
+
+    let start_time = Instant::now();
     let transcript = pipeline
         .stop_and_transcribe()
         .await
-        .map_err(CommandError::from)?;
+        .map_err(|e| {
+            if let Some(log_store) = app.try_state::<RequestLogStore>() {
+                log_store.with_current(|log| {
+                    log.error(format!("Transcription failed: {}", e));
+                    log.complete_error(e.to_string());
+                });
+                log_store.complete_current();
+            }
+            CommandError::from(e)
+        })?;
+
+    let duration = start_time.elapsed();
+
+    // Log success
+    if let Some(log_store) = app.try_state::<RequestLogStore>() {
+        log_store.with_current(|log| {
+            log.raw_transcript = Some(transcript.clone());
+            log.stt_duration_ms = Some(duration.as_millis() as u64);
+            log.info(format!(
+                "Transcription completed in {}ms ({} chars)",
+                duration.as_millis(),
+                transcript.len()
+            ));
+            log.complete_success();
+        });
+        log_store.complete_current();
+    }
 
     // Emit transcript ready event
     let _ = app.emit("pipeline-transcript-ready", &transcript);
@@ -86,6 +148,15 @@ pub fn pipeline_cancel(
     app: AppHandle,
     pipeline: State<'_, SharedPipeline>,
 ) -> Result<(), CommandError> {
+    // Log cancellation
+    if let Some(log_store) = app.try_state::<RequestLogStore>() {
+        log_store.with_current(|log| {
+            log.warn("Recording cancelled by user");
+            log.complete_cancelled();
+        });
+        log_store.complete_current();
+    }
+
     pipeline.cancel();
 
     // Emit cancelled event
@@ -179,22 +250,69 @@ pub async fn pipeline_dictate(
     app: AppHandle,
     pipeline: State<'_, SharedPipeline>,
 ) -> Result<String, CommandError> {
+    // Log transcription start
+    if let Some(log_store) = app.try_state::<RequestLogStore>() {
+        log_store.with_current(|log| {
+            log.info("Recording stopped, starting transcription");
+        });
+    }
+
     // Stop and transcribe
     let _ = app.emit("pipeline-transcription-started", ());
+    let start_time = Instant::now();
 
     let transcript = pipeline
         .stop_and_transcribe()
         .await
-        .map_err(CommandError::from)?;
+        .map_err(|e| {
+            if let Some(log_store) = app.try_state::<RequestLogStore>() {
+                log_store.with_current(|log| {
+                    log.error(format!("Transcription failed: {}", e));
+                    log.complete_error(e.to_string());
+                });
+                log_store.complete_current();
+            }
+            CommandError::from(e)
+        })?;
+
+    let duration = start_time.elapsed();
 
     // Emit transcript ready event
     let _ = app.emit("pipeline-transcript-ready", &transcript);
 
     // Type the transcript
     if !transcript.is_empty() {
+        if let Some(log_store) = app.try_state::<RequestLogStore>() {
+            log_store.with_current(|log| {
+                log.info("Typing transcript...");
+            });
+        }
+
         crate::commands::text::type_text(app.clone(), transcript.clone())
             .await
-            .map_err(CommandError::from)?;
+            .map_err(|e| {
+                if let Some(log_store) = app.try_state::<RequestLogStore>() {
+                    log_store.with_current(|log| {
+                        log.error(format!("Failed to type text: {}", e));
+                    });
+                }
+                CommandError::from(e)
+            })?;
+    }
+
+    // Log success
+    if let Some(log_store) = app.try_state::<RequestLogStore>() {
+        log_store.with_current(|log| {
+            log.raw_transcript = Some(transcript.clone());
+            log.stt_duration_ms = Some(duration.as_millis() as u64);
+            log.info(format!(
+                "Transcription completed in {}ms ({} chars)",
+                duration.as_millis(),
+                transcript.len()
+            ));
+            log.complete_success();
+        });
+        log_store.complete_current();
     }
 
     Ok(transcript)
@@ -209,7 +327,35 @@ pub async fn pipeline_toggle(
     if pipeline.is_recording() {
         pipeline_dictate(app, pipeline).await
     } else {
-        pipeline.start_recording().map_err(CommandError::from)?;
+        // Start recording with logging
+        if let Some(log_store) = app.try_state::<RequestLogStore>() {
+            let config = pipeline.config();
+            log_store.start_request(
+                config.stt_provider.clone(),
+                config.stt_model.clone(),
+            );
+            log_store.with_current(|log| {
+                log.llm_provider = if config.llm_config.enabled {
+                    Some(config.llm_config.provider.clone())
+                } else {
+                    None
+                };
+                log.llm_model = config.llm_config.model.clone();
+                log.info("Recording started (toggle)");
+            });
+        }
+
+        pipeline.start_recording().map_err(|e| {
+            if let Some(log_store) = app.try_state::<RequestLogStore>() {
+                log_store.with_current(|log| {
+                    log.error(format!("Failed to start recording: {}", e));
+                    log.complete_error(e.to_string());
+                });
+                log_store.complete_current();
+            }
+            CommandError::from(e)
+        })?;
+
         let _ = app.emit("pipeline-recording-started", ());
         Ok(String::new())
     }

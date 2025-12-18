@@ -55,7 +55,9 @@ export interface AppSettings {
 	sound_enabled: boolean;
 	cleanup_prompt_sections: CleanupPromptSections | null;
 	stt_provider: string | null;
+	stt_model: string | null;
 	llm_provider: string | null;
+	llm_model: string | null;
 	auto_mute_audio: boolean;
 	stt_timeout_seconds: number | null;
 }
@@ -199,7 +201,9 @@ export const tauriAPI = {
 					"cleanup_prompt_sections",
 				)) ?? null,
 			stt_provider: (await store.get<string | null>("stt_provider")) ?? null,
+			stt_model: (await store.get<string | null>("stt_model")) ?? null,
 			llm_provider: (await store.get<string | null>("llm_provider")) ?? null,
+			llm_model: (await store.get<string | null>("llm_model")) ?? null,
 			auto_mute_audio: (await store.get<boolean>("auto_mute_audio")) ?? false,
 			stt_timeout_seconds:
 				(await store.get<number | null>("stt_timeout_seconds")) ?? null,
@@ -250,9 +254,21 @@ export const tauriAPI = {
 		await store.save();
 	},
 
+	async updateSTTModel(model: string | null): Promise<void> {
+		const store = await getStore();
+		await store.set("stt_model", model);
+		await store.save();
+	},
+
 	async updateLLMProvider(provider: string | null): Promise<void> {
 		const store = await getStore();
 		await store.set("llm_provider", provider);
+		await store.save();
+	},
+
+	async updateLLMModel(model: string | null): Promise<void> {
+		const store = await getStore();
+		await store.set("llm_model", model);
 		await store.save();
 	},
 
@@ -405,4 +421,42 @@ export const configAPI = {
 
 	// Sync pipeline config when settings change
 	syncPipelineConfig: () => invoke<void>("sync_pipeline_config"),
+};
+
+// ============================================================================
+// Request Logs API
+// ============================================================================
+
+export type LogLevel = "debug" | "info" | "warn" | "error";
+export type RequestStatus = "in_progress" | "success" | "error" | "cancelled";
+
+export interface LogEntry {
+	timestamp: string;
+	level: LogLevel;
+	message: string;
+	details: string | null;
+}
+
+export interface RequestLog {
+	id: string;
+	started_at: string;
+	ended_at: string | null;
+	stt_provider: string;
+	stt_model: string | null;
+	llm_provider: string | null;
+	llm_model: string | null;
+	raw_transcript: string | null;
+	final_text: string | null;
+	stt_duration_ms: number | null;
+	llm_duration_ms: number | null;
+	status: RequestStatus;
+	error_message: string | null;
+	entries: LogEntry[];
+}
+
+export const logsAPI = {
+	getRequestLogs: (limit?: number) =>
+		invoke<RequestLog[]>("get_request_logs", { limit: limit ?? 100 }),
+
+	clearRequestLogs: () => invoke<void>("clear_request_logs"),
 };

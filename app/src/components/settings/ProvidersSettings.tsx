@@ -3,13 +3,55 @@ import { useEffect, useState } from "react";
 import {
 	useAvailableProviders,
 	useSettings,
+	useUpdateLLMModel,
 	useUpdateLLMProvider,
+	useUpdateSTTModel,
 	useUpdateSTTProvider,
 	useUpdateSTTTimeout,
 } from "../../lib/queries";
 import { tauriAPI } from "../../lib/tauri";
 
 const DEFAULT_STT_TIMEOUT = 0.8;
+
+// Model options for each STT provider
+const STT_MODELS: Record<string, { value: string; label: string }[]> = {
+	groq: [
+		{ value: "whisper-large-v3", label: "Whisper Large V3" },
+		{ value: "whisper-large-v3-turbo", label: "Whisper Large V3 Turbo" },
+	],
+	openai: [
+		{ value: "gpt-4o-audio-preview", label: "GPT-4o Audio Preview" },
+		{ value: "gpt-4o-mini-audio-preview", label: "GPT-4o Mini Audio Preview" },
+		{ value: "whisper-1", label: "Whisper 1 (Legacy)" },
+	],
+	deepgram: [
+		{ value: "nova-2", label: "Nova 2" },
+		{ value: "nova", label: "Nova" },
+		{ value: "enhanced", label: "Enhanced" },
+		{ value: "base", label: "Base" },
+	],
+	whisper: [], // Local whisper has its own model management
+};
+
+// Model options for each LLM provider
+const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
+	groq: [
+		{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B Versatile" },
+		{ value: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant" },
+		{ value: "mixtral-8x7b-32768", label: "Mixtral 8x7B" },
+	],
+	openai: [
+		{ value: "gpt-4o-mini", label: "GPT-4o Mini" },
+		{ value: "gpt-4o", label: "GPT-4o" },
+		{ value: "gpt-4-turbo", label: "GPT-4 Turbo" },
+	],
+	anthropic: [
+		{ value: "claude-3-5-haiku-latest", label: "Claude 3.5 Haiku" },
+		{ value: "claude-3-5-sonnet-latest", label: "Claude 3.5 Sonnet" },
+		{ value: "claude-3-opus-latest", label: "Claude 3 Opus" },
+	],
+	ollama: [], // Ollama models are dynamic based on what's installed
+};
 
 export function ProvidersSettings() {
 	const { data: settings, isLoading: isLoadingSettings } = useSettings();
@@ -19,13 +61,30 @@ export function ProvidersSettings() {
 	// Wait for settings (source of truth) and provider list (for options)
 	const isLoadingProviderData = isLoadingSettings || isLoadingProviders;
 	const updateSTTProvider = useUpdateSTTProvider();
+	const updateSTTModel = useUpdateSTTModel();
 	const updateLLMProvider = useUpdateLLMProvider();
+	const updateLLMModel = useUpdateLLMModel();
 	const updateSTTTimeout = useUpdateSTTTimeout();
 
 	const handleSTTProviderChange = (value: string | null) => {
 		if (!value) return;
 		// Save to local settings (Tauri) then notify overlay window to sync to server
 		updateSTTProvider.mutate(value, {
+			onSuccess: () => {
+				// Reset model to first available when provider changes
+				const models = STT_MODELS[value];
+				const firstModel = models?.[0];
+				if (firstModel) {
+					updateSTTModel.mutate(firstModel.value);
+				}
+				tauriAPI.emitSettingsChanged();
+			},
+		});
+	};
+
+	const handleSTTModelChange = (value: string | null) => {
+		if (!value) return;
+		updateSTTModel.mutate(value, {
 			onSuccess: () => {
 				tauriAPI.emitSettingsChanged();
 			},
@@ -36,6 +95,21 @@ export function ProvidersSettings() {
 		if (!value) return;
 		// Save to local settings (Tauri) then notify overlay window to sync to server
 		updateLLMProvider.mutate(value, {
+			onSuccess: () => {
+				// Reset model to first available when provider changes
+				const models = LLM_MODELS[value];
+				const firstModel = models?.[0];
+				if (firstModel) {
+					updateLLMModel.mutate(firstModel.value);
+				}
+				tauriAPI.emitSettingsChanged();
+			},
+		});
+	};
+
+	const handleLLMModelChange = (value: string | null) => {
+		if (!value) return;
+		updateLLMModel.mutate(value, {
 			onSuccess: () => {
 				tauriAPI.emitSettingsChanged();
 			},
@@ -99,13 +173,22 @@ export function ProvidersSettings() {
 	const isSttProviderLocal = selectedSttProvider?.is_local ?? false;
 	const isLlmProviderLocal = selectedLlmProvider?.is_local ?? false;
 
+	// Get available models for the selected providers
+	const sttModelOptions = settings?.stt_provider
+		? (STT_MODELS[settings.stt_provider] ?? [])
+		: [];
+	const llmModelOptions = settings?.llm_provider
+		? (LLM_MODELS[settings.llm_provider] ?? [])
+		: [];
+
 	return (
 		<div className="settings-section animate-in animate-in-delay-1">
 			<h3 className="settings-section-title">Providers</h3>
 			<div className="settings-card">
+				{/* STT Provider */}
 				<div className="settings-row">
 					<div>
-						<p className="settings-label">Speech-to-Text</p>
+						<p className="settings-label">Speech-to-Text Provider</p>
 						<p className="settings-description">
 							Service for transcribing audio
 						</p>
@@ -145,9 +228,38 @@ export function ProvidersSettings() {
 						)}
 					</div>
 				</div>
+
+				{/* STT Model - only show if provider has models */}
+				{sttModelOptions.length > 0 && (
+					<div className="settings-row" style={{ marginTop: 12 }}>
+						<div>
+							<p className="settings-label">STT Model</p>
+							<p className="settings-description">
+								Model to use for transcription
+							</p>
+						</div>
+						<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+							<Select
+								data={sttModelOptions}
+								value={settings?.stt_model ?? sttModelOptions[0]?.value ?? null}
+								onChange={handleSTTModelChange}
+								placeholder="Select model"
+								styles={{
+									input: {
+										backgroundColor: "var(--bg-elevated)",
+										borderColor: "var(--border-default)",
+										color: "var(--text-primary)",
+									},
+								}}
+							/>
+						</div>
+					</div>
+				)}
+
+				{/* LLM Provider */}
 				<div className="settings-row" style={{ marginTop: 16 }}>
 					<div>
-						<p className="settings-label">Language Model</p>
+						<p className="settings-label">Language Model Provider</p>
 						<p className="settings-description">
 							AI service for text formatting
 						</p>
@@ -187,6 +299,35 @@ export function ProvidersSettings() {
 						)}
 					</div>
 				</div>
+
+				{/* LLM Model - only show if provider has models */}
+				{llmModelOptions.length > 0 && (
+					<div className="settings-row" style={{ marginTop: 12 }}>
+						<div>
+							<p className="settings-label">LLM Model</p>
+							<p className="settings-description">
+								Model to use for text formatting
+							</p>
+						</div>
+						<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+							<Select
+								data={llmModelOptions}
+								value={settings?.llm_model ?? llmModelOptions[0]?.value ?? null}
+								onChange={handleLLMModelChange}
+								placeholder="Select model"
+								styles={{
+									input: {
+										backgroundColor: "var(--bg-elevated)",
+										borderColor: "var(--border-default)",
+										color: "var(--text-primary)",
+									},
+								}}
+							/>
+						</div>
+					</div>
+				)}
+
+				{/* STT Timeout */}
 				<div className="settings-row" style={{ marginTop: 16 }}>
 					<div style={{ flex: 1 }}>
 						<p className="settings-label">STT Timeout</p>

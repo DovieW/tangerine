@@ -4,6 +4,7 @@ import {
 	type CleanupPromptSections,
 	configAPI,
 	type HotkeyConfig,
+	logsAPI,
 	tauriAPI,
 	validateHotkeyNotDuplicate,
 } from "./tauri";
@@ -251,11 +252,35 @@ export function useUpdateSTTProvider() {
 	});
 }
 
+export function useUpdateSTTModel() {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: async (model: string | null) => {
+			await tauriAPI.updateSTTModel(model);
+			// Sync the pipeline configuration when STT model changes
+			await configAPI.syncPipelineConfig();
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: ["settings"] });
+		},
+	});
+}
+
 export function useUpdateLLMProvider() {
 	const queryClient = useQueryClient();
 	return useMutation({
 		mutationFn: (provider: string | null) =>
 			tauriAPI.updateLLMProvider(provider),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: ["settings"] });
+		},
+	});
+}
+
+export function useUpdateLLMModel() {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: (model: string | null) => tauriAPI.updateLLMModel(model),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ["settings"] });
 		},
@@ -270,6 +295,25 @@ export function useUpdateSTTTimeout() {
 			tauriAPI.updateSTTTimeout(timeoutSeconds),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ["settings"] });
+		},
+	});
+}
+
+// Request Logs queries and mutations
+export function useRequestLogs(limit?: number) {
+	return useQuery({
+		queryKey: ["requestLogs", limit],
+		queryFn: () => logsAPI.getRequestLogs(limit),
+		refetchInterval: 2000, // Refresh every 2 seconds to show live updates
+	});
+}
+
+export function useClearRequestLogs() {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: () => logsAPI.clearRequestLogs(),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: ["requestLogs"] });
 		},
 	});
 }

@@ -1,6 +1,7 @@
 pub mod config;
 pub mod history;
 pub mod llm;
+pub mod logs;
 pub mod overlay;
 pub mod recording;
 pub mod settings;

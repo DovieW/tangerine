@@ -13,6 +13,7 @@ mod commands;
 mod history;
 mod llm;
 mod pipeline;
+mod request_log;
 mod settings;
 mod state;
 mod stt;
@@ -370,6 +371,9 @@ pub fn run() {
             commands::whisper::get_whisper_model_url,
             commands::whisper::delete_whisper_model,
             commands::whisper::validate_whisper_model,
+            // Request logging commands
+            commands::logs::get_request_logs,
+            commands::logs::clear_request_logs,
         ])
         .setup(|app| {
             // Initialize history storage
@@ -380,6 +384,10 @@ pub fn run() {
 
             let history_storage = HistoryStorage::new(app_data_dir);
             app.manage(history_storage);
+
+            // Initialize request log store
+            let request_log_store = request_log::RequestLogStore::new();
+            app.manage(request_log_store);
 
             // Initialize audio mute manager (may be None on unsupported platforms)
             if let Some(audio_mute_manager) = AudioMuteManager::new() {

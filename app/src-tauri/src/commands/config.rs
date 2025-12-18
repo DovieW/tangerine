@@ -259,9 +259,39 @@ pub fn sync_pipeline_config(app: AppHandle) -> Result<(), String> {
         .and_then(|v| serde_json::from_value(v).ok())
         .unwrap_or_else(|| "groq".to_string());
 
+    // Read STT model from store
+    let stt_model: Option<String> = app
+        .store("settings.json")
+        .ok()
+        .and_then(|store| store.get("stt_model"))
+        .and_then(|v| serde_json::from_value(v).ok());
+
     // Get the appropriate API key based on provider
     let stt_api_key: String = {
         let key_name = format!("{}_api_key", stt_provider);
+        app.store("settings.json")
+            .ok()
+            .and_then(|store| store.get(&key_name))
+            .and_then(|v| serde_json::from_value(v).ok())
+            .unwrap_or_default()
+    };
+
+    // Read LLM settings from store
+    let llm_provider: String = app
+        .store("settings.json")
+        .ok()
+        .and_then(|store| store.get("llm_provider"))
+        .and_then(|v| serde_json::from_value(v).ok())
+        .unwrap_or_else(|| "groq".to_string());
+
+    let llm_model: Option<String> = app
+        .store("settings.json")
+        .ok()
+        .and_then(|store| store.get("llm_model"))
+        .and_then(|v| serde_json::from_value(v).ok());
+
+    let llm_api_key: String = {
+        let key_name = format!("{}_api_key", llm_provider);
         app.store("settings.json")
             .ok()
             .and_then(|store| store.get(&key_name))
@@ -280,13 +310,18 @@ pub fn sync_pipeline_config(app: AppHandle) -> Result<(), String> {
     let config = PipelineConfig {
         stt_provider: stt_provider.clone(),
         stt_api_key,
-        stt_model: None,
+        stt_model: stt_model.clone(),
         max_duration_secs: 300.0,
         retry_config: RetryConfig::default(),
         vad_config: vad_settings.to_vad_auto_stop_config(),
         transcription_timeout: std::time::Duration::from_secs(60),
         max_recording_bytes: 50 * 1024 * 1024, // 50MB
-        llm_config: crate::llm::LlmConfig::default(),
+        llm_config: crate::llm::LlmConfig {
+            provider: llm_provider.clone(),
+            api_key: llm_api_key,
+            model: llm_model.clone(),
+            ..Default::default()
+        },
     };
 
     // Update the pipeline
@@ -295,8 +330,11 @@ pub fn sync_pipeline_config(app: AppHandle) -> Result<(), String> {
             .update_config(config)
             .map_err(|e| format!("Failed to update pipeline config: {}", e))?;
         log::info!(
-            "Pipeline config synced with provider: {}, VAD enabled: {}",
+            "Pipeline config synced - STT: {} ({}), LLM: {} ({}), VAD: {}",
             stt_provider,
+            stt_model.as_deref().unwrap_or("default"),
+            llm_provider,
+            llm_model.as_deref().unwrap_or("default"),
             vad_settings.enabled
         );
     }

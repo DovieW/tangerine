@@ -655,6 +655,14 @@ impl SharedPipeline {
             .unwrap_or_default()
     }
 
+    /// Get a clone of the current pipeline configuration
+    pub fn config(&self) -> PipelineConfig {
+        self.inner
+            .lock()
+            .map(|inner| inner.config.clone())
+            .unwrap_or_default()
+    }
+
     /// Check if the pipeline is in an error state
     pub fn is_error(&self) -> bool {
         self.inner
