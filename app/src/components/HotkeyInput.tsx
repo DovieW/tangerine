@@ -2,6 +2,7 @@ import { Kbd } from "@mantine/core";
 import { useEffect } from "react";
 import { useRecordHotkeys } from "react-hotkeys-hook";
 import type { HotkeyConfig } from "../lib/tauri";
+import { tauriAPI } from "../lib/tauri";
 
 interface HotkeyInputProps {
 	label: string;
@@ -205,6 +206,15 @@ export function HotkeyInput({
 
 	// Use external state if provided, otherwise use internal
 	const isRecording = externalIsRecording ?? internalIsRecording;
+
+	// Unregister global shortcuts when recording starts, re-register when done
+	useEffect(() => {
+		if (isRecording) {
+			tauriAPI.unregisterShortcuts().catch(console.error);
+		} else {
+			tauriAPI.registerShortcuts().catch(console.error);
+		}
+	}, [isRecording]);
 
 	// Handle Escape key to cancel recording
 	useEffect(() => {

@@ -78,8 +78,19 @@ fn start_recording(
     auto_mute_audio: bool,
     source: &str,
 ) {
-    state.is_recording.store(true, Ordering::SeqCst);
     log::info!("{}: starting recording", source);
+
+    // Start pipeline recording FIRST - if it fails, don't do anything else
+    if let Some(pipeline) = app.try_state::<pipeline::SharedPipeline>() {
+        if let Err(e) = pipeline.start_recording() {
+            log::error!("Failed to start pipeline recording: {}", e);
+            let _ = app.emit("pipeline-error", e.to_string());
+            return;
+        }
+    }
+
+    // Pipeline started successfully - now update state and do side effects
+    state.is_recording.store(true, Ordering::SeqCst);
 
     // Show overlay if in "recording_only" mode
     let overlay_mode: String = get_setting_from_store(app, "overlay_mode", "always".to_string());
@@ -101,13 +112,6 @@ fn start_recording(
             if let Err(e) = manager.mute() {
                 log::warn!("Failed to mute audio: {}", e);
             }
-        }
-    }
-
-    // Start pipeline recording
-    if let Some(pipeline) = app.try_state::<pipeline::SharedPipeline>() {
-        if let Err(e) = pipeline.start_recording() {
-            log::error!("Failed to start pipeline recording: {}", e);
         }
     }
 

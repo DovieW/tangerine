@@ -43,6 +43,7 @@ pub struct RequestLog {
     /// When the request started
     pub started_at: DateTime<Utc>,
     /// When the request completed (if finished)
+    #[serde(rename = "ended_at")]
     pub completed_at: Option<DateTime<Utc>>,
     /// STT provider used
     pub stt_provider: String,
@@ -61,9 +62,12 @@ pub struct RequestLog {
     /// Raw transcript from STT
     pub raw_transcript: Option<String>,
     /// Formatted transcript from LLM (if used)
+    #[serde(rename = "final_text")]
     pub formatted_transcript: Option<String>,
     /// Final result (success or error)
     pub status: RequestStatus,
+    /// Error message if status is Error
+    pub error_message: Option<String>,
     /// All log entries for this request
     pub entries: Vec<LogEntry>,
     /// Total duration in milliseconds
@@ -76,14 +80,14 @@ pub struct RequestLog {
 
 /// Status of a request
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum RequestStatus {
     /// Request is in progress
     InProgress,
     /// Request completed successfully
     Success,
     /// Request failed
-    Error(String),
+    Error,
     /// Request was cancelled
     Cancelled,
 }
@@ -105,6 +109,7 @@ impl RequestLog {
             raw_transcript: None,
             formatted_transcript: None,
             status: RequestStatus::InProgress,
+            error_message: None,
             entries: Vec::new(),
             total_duration_ms: None,
             stt_duration_ms: None,
@@ -160,7 +165,8 @@ impl RequestLog {
     /// Mark request as complete with error
     pub fn complete_error(&mut self, error: impl Into<String>) {
         self.completed_at = Some(Utc::now());
-        self.status = RequestStatus::Error(error.into());
+        self.status = RequestStatus::Error;
+        self.error_message = Some(error.into());
         self.total_duration_ms = Some(
             (self.completed_at.unwrap() - self.started_at)
                 .num_milliseconds() as u64,
@@ -283,6 +289,7 @@ mod tests {
         assert_eq!(log.stt_provider, "groq");
         assert_eq!(log.stt_model, Some("whisper-large-v3".to_string()));
         assert_eq!(log.status, RequestStatus::InProgress);
+        assert_eq!(log.error_message, None);
     }
 
     #[test]

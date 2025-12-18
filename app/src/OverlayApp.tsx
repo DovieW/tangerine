@@ -398,17 +398,51 @@ function RecordingControl() {
 			unlisteners.push(
 				await listen("pipeline-transcription-started", () => {
 					setPipelineState("transcribing");
+					startResponseTimeout();
 				}),
 			);
 
 			unlisteners.push(
 				await listen("pipeline-cancelled", () => {
 					setPipelineState("idle");
+					clearResponseTimeout();
 				}),
 			);
 
 			unlisteners.push(
 				await listen("pipeline-reset", () => {
+					setPipelineState("idle");
+					clearResponseTimeout();
+				}),
+			);
+
+			// Listen for pipeline errors (e.g., transcription failures from hotkey-triggered recordings)
+			unlisteners.push(
+				await listen<string>("pipeline-error", (event) => {
+					console.error("[Pipeline] Error from Rust:", event.payload);
+					clearResponseTimeout();
+					setPipelineState("error");
+
+					const errorInfo = parseError(event.payload);
+					setLastError(errorInfo);
+					startErrorTimeout();
+
+					// Attempt to recover after showing error
+					setTimeout(async () => {
+						try {
+							await invoke("pipeline_force_reset");
+							setPipelineState("idle");
+						} catch (resetError) {
+							console.error("[Pipeline] Failed to reset:", resetError);
+						}
+					}, 1000);
+				}),
+			);
+
+			// Listen for successful transcription (from hotkey-triggered recordings)
+			unlisteners.push(
+				await listen<string>("pipeline-transcript-ready", () => {
+					clearResponseTimeout();
 					setPipelineState("idle");
 				}),
 			);
@@ -421,7 +455,7 @@ function RecordingControl() {
 				unlisten();
 			}
 		};
-	}, []);
+	}, [clearResponseTimeout, startResponseTimeout, startErrorTimeout]);
 
 	// Listen for settings changes from main window
 	useEffect(() => {
