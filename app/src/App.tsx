@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { HistoryFeed } from "./components/HistoryFeed";
 import { Logo } from "./components/Logo";
 import {
+	ApiKeysSettings,
 	AudioSettings,
 	HotkeySettings,
 	PromptSettings,
@@ -194,6 +195,7 @@ function SettingsView() {
 				</Text>
 			</header>
 
+			<ApiKeysSettings />
 			<ProvidersSettings />
 			<AudioSettings />
 			<HotkeySettings />

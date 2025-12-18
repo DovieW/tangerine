@@ -272,6 +272,25 @@ export const tauriAPI = {
 		return invoke("is_audio_mute_supported");
 	},
 
+	// API Key management
+	async hasApiKey(storeKey: string): Promise<boolean> {
+		const store = await getStore();
+		const value = await store.get<string>(storeKey);
+		return value !== null && value !== undefined && value.length > 0;
+	},
+
+	async setApiKey(storeKey: string, apiKey: string): Promise<void> {
+		const store = await getStore();
+		await store.set(storeKey, apiKey);
+		await store.save();
+	},
+
+	async clearApiKey(storeKey: string): Promise<void> {
+		const store = await getStore();
+		await store.delete(storeKey);
+		await store.save();
+	},
+
 	async resetHotkeysToDefaults(): Promise<void> {
 		const store = await getStore();
 		await store.set("toggle_hotkey", defaultToggleHotkey);
