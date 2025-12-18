@@ -74,27 +74,25 @@ jobs:
           workspaces: |
             app/src-tauri -> target
 
-      - name: Run Rust tests (release)
+      - name: Run Rust tests
         working-directory: app/src-tauri
         shell: bash
-        env:
-          RUSTC_WRAPPER: sccache
-          SCCACHE_GHA_ENABLED: "true"
         run: |
           set -euo pipefail
-          echo "sccache: $(sccache --version || true)"
-          sccache --show-stats || true
+          # Debug tests are substantially faster than --release on Windows, and jobs
+          # don't share build outputs anyway. Keep the workflow fast.
+          export SCCACHE_GHA_ENABLED="true"
+          export SCCACHE_NO_DAEMON="1"
 
-          echo "Running tests with sccache..."
-          if cargo test --lib --release; then
-            echo "Tests succeeded with sccache."
-          else
-            echo "Tests failed with sccache; retrying without sccache wrapper..."
+          if sccache --version >/dev/null 2>&1; then
+            export RUSTC_WRAPPER=sccache
+            echo "Using sccache: $(sccache --version)"
             sccache --show-stats || true
-            unset RUSTC_WRAPPER
-            unset SCCACHE_GHA_ENABLED
-            cargo test --lib --release
+          else
+            echo "sccache not available; running tests without compiler cache"
           fi
+
+          cargo test --lib
 
           sccache --show-stats || true
 
@@ -154,24 +152,20 @@ jobs:
       - name: Build Tauri app (release)
         working-directory: app
         shell: bash
-        env:
-          RUSTC_WRAPPER: sccache
-          SCCACHE_GHA_ENABLED: "true"
         run: |
           set -euo pipefail
-          echo "sccache: $(sccache --version || true)"
-          sccache --show-stats || true
+          export SCCACHE_GHA_ENABLED="true"
+          export SCCACHE_NO_DAEMON="1"
 
-          echo "Building with sccache..."
-          if pnpm build; then
-            echo "Build succeeded with sccache."
-          else
-            echo "Build failed with sccache; retrying without sccache wrapper..."
+          if sccache --version >/dev/null 2>&1; then
+            export RUSTC_WRAPPER=sccache
+            echo "Using sccache: $(sccache --version)"
             sccache --show-stats || true
-            unset RUSTC_WRAPPER
-            unset SCCACHE_GHA_ENABLED
-            pnpm build
+          else
+            echo "sccache not available; building without compiler cache"
           fi
+
+          pnpm build
 
           sccache --show-stats || true
 

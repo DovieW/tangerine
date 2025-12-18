@@ -327,7 +327,13 @@ pub async fn pipeline_toggle(
     if pipeline.is_recording() {
         pipeline_dictate(app, pipeline).await
     } else {
-        // Start recording with logging
+        // Try to start the pipeline FIRST - don't create a log if it fails
+        pipeline.start_recording().map_err(|e| {
+            log::warn!("Toggle: Failed to start recording: {}", e);
+            CommandError::from(e)
+        })?;
+
+        // Pipeline started successfully - now create the request log
         if let Some(log_store) = app.try_state::<RequestLogStore>() {
             let config = pipeline.config();
             log_store.start_request(
@@ -344,17 +350,6 @@ pub async fn pipeline_toggle(
                 log.info("Recording started (toggle)");
             });
         }
-
-        pipeline.start_recording().map_err(|e| {
-            if let Some(log_store) = app.try_state::<RequestLogStore>() {
-                log_store.with_current(|log| {
-                    log.error(format!("Failed to start recording: {}", e));
-                    log.complete_error(e.to_string());
-                });
-                log_store.complete_current();
-            }
-            CommandError::from(e)
-        })?;
 
         let _ = app.emit("pipeline-recording-started", ());
         Ok(String::new())
