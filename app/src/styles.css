@@ -330,6 +330,41 @@ body {
 }
 
 /* Settings Panel */
+.settings-accordion {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.settings-accordion .settings-section {
+	margin-bottom: 0;
+	background: var(--bg-card);
+	border: 1px solid var(--border-subtle);
+	border-radius: 12px;
+}
+
+.settings-accordion .settings-section-title {
+	font-family: "Sora", sans-serif;
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--text-primary);
+	padding: 16px 20px;
+	margin-bottom: 0;
+	cursor: pointer;
+	border-radius: 12px;
+}
+
+.settings-accordion .settings-section-title:hover {
+	background: var(--bg-hover);
+}
+
+.settings-accordion .settings-card {
+	background: transparent;
+	border: none;
+	border-radius: 0;
+	padding: 0 20px 20px;
+}
+
 .settings-section {
 	margin-bottom: 32px;
 }

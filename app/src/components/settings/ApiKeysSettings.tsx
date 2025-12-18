@@ -179,17 +179,14 @@ function ApiKeyInput({ config }: { config: ApiKeyConfig }) {
 
 export function ApiKeysSettings() {
 	return (
-		<div className="settings-section animate-in animate-in-delay-1">
-			<h3 className="settings-section-title">API Keys</h3>
-			<div className="settings-card">
-				<Text size="sm" c="dimmed" mb="md">
-					Add API keys to enable cloud providers. Keys are stored locally and
-					never sent anywhere except to the provider's API.
-				</Text>
-				{API_KEYS.map((config) => (
-					<ApiKeyInput key={config.id} config={config} />
-				))}
-			</div>
-		</div>
+		<>
+			<Text size="sm" c="dimmed" mb="md">
+				Add API keys to enable cloud providers. Keys are stored locally and
+				never sent anywhere except to the provider's API.
+			</Text>
+			{API_KEYS.map((config) => (
+				<ApiKeyInput key={config.id} config={config} />
+			))}
+		</>
 	);
 }

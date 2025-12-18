@@ -145,66 +145,63 @@ export function PromptSettings() {
 	};
 
 	return (
-		<div className="settings-section animate-in animate-in-delay-4">
-			<h3 className="settings-section-title">LLM Formatting Prompt</h3>
-			<div className="settings-card">
-				{isLoadingDefaultSections ? (
-					<div
-						style={{
-							display: "flex",
-							justifyContent: "center",
-							padding: "20px",
-						}}
-					>
-						<Loader size="sm" color="gray" />
-					</div>
-				) : (
-					<Accordion variant="separated" radius="md">
-						<PromptSectionEditor
-							sectionKey="main-prompt"
-							title="Core Formatting Rules"
-							description="Filler word removal, punctuation, capitalization"
-							enabled={true}
-							hideToggle={true}
-							initialContent={localSections.main.content}
-							defaultContent={defaultSections?.main ?? ""}
-							hasCustom={hasCustomContent.main}
-							onToggle={() => {}}
-							onSave={(content) => handleSave("main", content)}
-							onReset={() => handleReset("main")}
-							isSaving={updateCleanupPromptSections.isPending}
-						/>
+		<>
+			{isLoadingDefaultSections ? (
+				<div
+					style={{
+						display: "flex",
+						justifyContent: "center",
+						padding: "20px",
+					}}
+				>
+					<Loader size="sm" color="gray" />
+				</div>
+			) : (
+				<Accordion variant="separated" radius="md">
+					<PromptSectionEditor
+						sectionKey="main-prompt"
+						title="Core Formatting Rules"
+						description="Filler word removal, punctuation, capitalization"
+						enabled={true}
+						hideToggle={true}
+						initialContent={localSections.main.content}
+						defaultContent={defaultSections?.main ?? ""}
+						hasCustom={hasCustomContent.main}
+						onToggle={() => {}}
+						onSave={(content) => handleSave("main", content)}
+						onReset={() => handleReset("main")}
+						isSaving={updateCleanupPromptSections.isPending}
+					/>
 
-						<PromptSectionEditor
-							sectionKey="advanced-prompt"
-							title="Advanced Features"
-							description='Backtrack corrections ("scratch that") and list formatting'
-							enabled={localSections.advanced.enabled}
-							initialContent={localSections.advanced.content}
-							defaultContent={defaultSections?.advanced ?? ""}
-							hasCustom={hasCustomContent.advanced}
-							onToggle={(checked) => handleToggle("advanced", checked)}
-							onSave={(content) => handleSave("advanced", content)}
-							onReset={() => handleReset("advanced")}
-							isSaving={updateCleanupPromptSections.isPending}
-						/>
+					<PromptSectionEditor
+						sectionKey="advanced-prompt"
+						title="Advanced Features"
+						description='Backtrack corrections ("scratch that") and list formatting'
+						enabled={localSections.advanced.enabled}
+						initialContent={localSections.advanced.content}
+						defaultContent={defaultSections?.advanced ?? ""}
+						hasCustom={hasCustomContent.advanced}
+						onToggle={(checked) => handleToggle("advanced", checked)}
+						onSave={(content) => handleSave("advanced", content)}
+						onReset={() => handleReset("advanced")}
+						isSaving={updateCleanupPromptSections.isPending}
+					/>
 
-						<PromptSectionEditor
-							sectionKey="dictionary-prompt"
-							title="Personal Dictionary"
-							description="Custom word mappings for technical terms"
-							enabled={localSections.dictionary.enabled}
-							initialContent={localSections.dictionary.content}
-							defaultContent={defaultSections?.dictionary ?? ""}
-							hasCustom={hasCustomContent.dictionary}
-							onToggle={(checked) => handleToggle("dictionary", checked)}
-							onSave={(content) => handleSave("dictionary", content)}
-							onReset={() => handleReset("dictionary")}
-							isSaving={updateCleanupPromptSections.isPending}
-						/>
-					</Accordion>
-				)}
-			</div>
-		</div>
+					<PromptSectionEditor
+						sectionKey="dictionary-prompt"
+						title="Personal Dictionary"
+						description="Custom word mappings for technical terms"
+						enabled={localSections.dictionary.enabled}
+						initialContent={localSections.dictionary.content}
+						defaultContent={defaultSections?.dictionary ?? ""}
+						hasCustom={hasCustomContent.dictionary}
+						onToggle={(checked) => handleToggle("dictionary", checked)}
+						onSave={(content) => handleSave("dictionary", content)}
+						onReset={() => handleReset("dictionary")}
+						isSaving={updateCleanupPromptSections.isPending}
+					/>
+				</Accordion>
+			)}
+		</>
 	);
 }

@@ -1,4 +1,12 @@
-import { Kbd, Loader, NavLink, Text, Title, Tooltip } from "@mantine/core";
+import {
+	Accordion,
+	Kbd,
+	Loader,
+	NavLink,
+	Text,
+	Title,
+	Tooltip,
+} from "@mantine/core";
 import { FileText, Home, Settings } from "lucide-react";
 import { useEffect, useState } from "react";
 import { HistoryFeed } from "./components/HistoryFeed";
@@ -193,7 +201,13 @@ function HomeView() {
 	);
 }
 
-function SettingsView() {
+function SettingsView({
+	expandedSection,
+	onSectionChange,
+}: {
+	expandedSection: string | null;
+	onSectionChange: (section: string | null) => void;
+}) {
 	return (
 		<div className="main-content">
 			<header className="animate-in" style={{ marginBottom: 32 }}>
@@ -205,24 +219,70 @@ function SettingsView() {
 				</Text>
 			</header>
 
-			<ApiKeysSettings />
-			<ProvidersSettings />
-			<AudioSettings />
-			<HotkeySettings />
-			<PromptSettings />
+			<Accordion
+				value={expandedSection}
+				onChange={onSectionChange}
+				classNames={{
+					root: "settings-accordion",
+					item: "settings-section animate-in",
+					control: "settings-section-title",
+					panel: "settings-card",
+				}}
+			>
+				<Accordion.Item value="api-keys">
+					<Accordion.Control>API Keys</Accordion.Control>
+					<Accordion.Panel>
+						<ApiKeysSettings />
+					</Accordion.Panel>
+				</Accordion.Item>
+
+				<Accordion.Item value="providers">
+					<Accordion.Control>Providers</Accordion.Control>
+					<Accordion.Panel>
+						<ProvidersSettings />
+					</Accordion.Panel>
+				</Accordion.Item>
+
+				<Accordion.Item value="audio">
+					<Accordion.Control>Audio &amp; Overlay</Accordion.Control>
+					<Accordion.Panel>
+						<AudioSettings />
+					</Accordion.Panel>
+				</Accordion.Item>
+
+				<Accordion.Item value="hotkeys">
+					<Accordion.Control>Hotkeys</Accordion.Control>
+					<Accordion.Panel>
+						<HotkeySettings />
+					</Accordion.Panel>
+				</Accordion.Item>
+
+				<Accordion.Item value="prompts">
+					<Accordion.Control>Prompts</Accordion.Control>
+					<Accordion.Panel>
+						<PromptSettings />
+					</Accordion.Panel>
+				</Accordion.Item>
+			</Accordion>
 		</div>
 	);
 }
 
 export default function App() {
 	const [activeView, setActiveView] = useState<View>("home");
+	const [expandedSection, setExpandedSection] = useState<string | null>(null);
 
 	const renderView = () => {
 		switch (activeView) {
 			case "home":
 				return <HomeView />;
 			case "settings":
-				return <SettingsView />;
+				return (
+					<SettingsView
+						expandedSection={expandedSection}
+						onSectionChange={setExpandedSection}
+					/>
+				);
 			case "logs":
 				return <LogsView />;
 			default:

@@ -80,7 +80,7 @@ fn start_recording(
 ) {
     state.is_recording.store(true, Ordering::SeqCst);
     log::info!("{}: starting recording", source);
-    
+
     // Show overlay if in "recording_only" mode
     let overlay_mode: String = get_setting_from_store(app, "overlay_mode", "always".to_string());
     if overlay_mode == "recording_only" {
@@ -88,7 +88,7 @@ fn start_recording(
             let _ = window.show();
         }
     }
-    
+
     // Play sound BEFORE muting so it's audible
     if sound_enabled {
         audio::play_sound(audio::SoundType::RecordingStart);
@@ -166,7 +166,7 @@ fn stop_recording(
                             }
                         }
                     }
-                    
+
                     // Hide overlay after transcription completes if in "recording_only" mode
                     if overlay_mode_clone == "recording_only" {
                         if let Some(window) = app_clone.get_webview_window("overlay") {
@@ -177,7 +177,7 @@ fn stop_recording(
                 Err(e) => {
                     log::error!("Transcription failed: {}", e);
                     let _ = app_clone.emit("pipeline-error", e.to_string());
-                    
+
                     // Hide overlay even on error if in "recording_only" mode
                     if overlay_mode_clone == "recording_only" {
                         if let Some(window) = app_clone.get_webview_window("overlay") {
