@@ -40,6 +40,9 @@ use tauri_plugin_store::StoreExt;
 #[cfg(desktop)]
 use tauri_plugin_global_shortcut::{Shortcut, ShortcutEvent, ShortcutState};
 
+#[cfg(desktop)]
+use tauri_plugin_global_shortcut::GlobalShortcutExt;
+
 // Define NSPanel type for overlay on macOS
 #[cfg(target_os = "macos")]
 tauri_nspanel::tauri_panel! {
@@ -377,6 +380,9 @@ fn start_recording(
         }
     }
 
+    // While recording/transcribing, allow Escape to cancel without triggering transcription.
+    set_escape_cancel_shortcut_enabled(app, true);
+
     // Pipeline started successfully - now update state and do side effects
     state.is_recording.store(true, Ordering::SeqCst);
 
@@ -446,6 +452,9 @@ fn stop_recording(
     state.is_recording.store(false, Ordering::SeqCst);
     log::info!("{}: stopping recording", source);
     emit_system_event(app, "shortcut", &format!("{}: stopping recording", source), None);
+
+    // Keep Escape-to-cancel enabled during the transcription phase too.
+    set_escape_cancel_shortcut_enabled(app, true);
     // Unmute system audio if it was muted
     if playing_audio_handling.wants_mute() {
         if let Some(manager) = audio_mute_manager {
@@ -642,6 +651,33 @@ fn stop_recording(
                     }
                 }
                 Err(e) => {
+                    if matches!(e, pipeline::PipelineError::Cancelled) {
+                        log::info!("Transcription cancelled");
+
+                        // Mark request as cancelled (best-effort)
+                        if let Some(log_store) = app_clone.try_state::<RequestLogStore>() {
+                            log_store.with_current(|log| {
+                                log.warn("Recording cancelled by user");
+                                log.complete_cancelled();
+                            });
+                            log_store.complete_current();
+                        }
+
+                        // Notify frontend and hide overlay if needed.
+                        let _ = app_clone.emit("pipeline-cancelled", ());
+
+                        if overlay_mode_clone == "recording_only" {
+                            let _ = app_clone.emit("overlay-hide-requested", ());
+                            if let Some(window) = app_clone.get_webview_window("overlay") {
+                                let _ = window.hide();
+                            }
+                        }
+
+                        // Done - stop stealing Escape.
+                        crate::set_escape_cancel_shortcut_enabled(&app_clone, false);
+                        return;
+                    }
+
                     log::error!("Transcription failed: {}", e);
                     let payload = serde_json::json!({
                         "message": e.to_string(),
@@ -682,10 +718,178 @@ fn stop_recording(
 
                 }
             }
+
+            // Transcription finished (success or error) - stop stealing Escape.
+            crate::set_escape_cancel_shortcut_enabled(&app_clone, false);
         });
     }
 
     let _ = app.emit("recording-stop", ());
+}
+
+// ============================================================================
+// Escape-to-cancel support
+// ============================================================================
+
+#[cfg(desktop)]
+const ESCAPE_CANCEL_SHORTCUT: &str = "Escape";
+
+/// Enable/disable the Escape global shortcut that cancels the current pipeline session.
+///
+/// We register this shortcut only while the pipeline is Recording/Transcribing so we don't
+/// steal Escape from other apps while idle.
+#[cfg(desktop)]
+pub(crate) fn set_escape_cancel_shortcut_enabled(app: &AppHandle, enabled: bool) {
+    // IMPORTANT: this function can be called from within a global-shortcut callback.
+    // Registering/unregistering shortcuts re-entrantly can crash/deadlock on some platforms.
+    // Schedule the actual work onto the async runtime to avoid re-entrancy.
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        set_escape_cancel_shortcut_enabled_inner(&app, enabled);
+    });
+}
+
+#[cfg(desktop)]
+fn set_escape_cancel_shortcut_enabled_inner(app: &AppHandle, enabled: bool) {
+    let shortcut_manager = app.global_shortcut();
+
+    let is_registered = shortcut_manager.is_registered(ESCAPE_CANCEL_SHORTCUT);
+    log::debug!(
+        "Escape shortcut toggle: enabled={} (currently registered={})",
+        enabled,
+        is_registered
+    );
+
+    if enabled {
+        if is_registered {
+            return;
+        }
+
+        if let Err(e) = shortcut_manager.on_shortcut(ESCAPE_CANCEL_SHORTCUT, |app, _shortcut, event| {
+            if event.state == ShortcutState::Pressed {
+                cancel_pipeline_session(app, "Escape");
+            }
+        }) {
+            log::warn!(
+                "Failed to register Escape cancel shortcut ({}): {}",
+                ESCAPE_CANCEL_SHORTCUT,
+                e
+            );
+        }
+    } else if is_registered {
+        if let Err(e) = shortcut_manager.unregister(ESCAPE_CANCEL_SHORTCUT) {
+            log::warn!(
+                "Failed to unregister Escape cancel shortcut ({}): {}",
+                ESCAPE_CANCEL_SHORTCUT,
+                e
+            );
+        }
+    }
+}
+
+/// Cancel current recording/transcription without triggering transcription output.
+///
+/// This is used by Escape-to-cancel and can also be reused by commands.
+#[cfg(desktop)]
+pub(crate) fn cancel_pipeline_session(app: &AppHandle, source: &str) {
+    let state = app.state::<AppState>();
+
+    // Best-effort: capture the active request id so we can clean up history.
+    let active_request_id: Option<String> = app
+        .try_state::<RequestLogStore>()
+        .and_then(|store| store.with_current(|log| log.id.clone()));
+
+    // If pipeline isn't in a cancellable state, ignore.
+    let can_cancel = app
+        .try_state::<pipeline::SharedPipeline>()
+        .map(|p| p.state().can_cancel())
+        .unwrap_or(false);
+
+    if !can_cancel {
+        // Defensive: if we somehow still have the shortcut registered while idle, disable it.
+        set_escape_cancel_shortcut_enabled(app, false);
+        return;
+    }
+
+    log::info!("{}: cancelling recording/transcription", source);
+    emit_system_event(app, "shortcut", &format!("{}: cancelling", source), None);
+
+    // Clear recording state flags.
+    state.is_recording.store(false, Ordering::SeqCst);
+    state.toggle_key_held.store(false, Ordering::SeqCst);
+    state.ptt_key_held.store(false, Ordering::SeqCst);
+
+    // Restore audio side effects (unmute + resume playback if we paused).
+    let sound_enabled: bool = get_setting_from_store(app, "sound_enabled", true);
+    let playing_audio_handling: PlayingAudioHandling = get_playing_audio_handling(app);
+    let audio_mute_manager = app.try_state::<AudioMuteManager>();
+
+    if playing_audio_handling.wants_mute() {
+        if let Some(manager) = audio_mute_manager.as_ref() {
+            if let Err(e) = manager.unmute() {
+                log::warn!("Failed to unmute audio after cancel: {}", e);
+            }
+        }
+    }
+
+    if playing_audio_handling.wants_pause()
+        && state.play_pause_toggled.swap(false, Ordering::SeqCst)
+    {
+        if let Err(e) = toggle_media_play_pause(app) {
+            log::warn!("Failed to restore media play/pause after cancel: {}", e);
+        }
+    }
+
+    if sound_enabled {
+        audio::play_sound(audio::SoundType::RecordingStop);
+    }
+
+    // Cancel request log
+    if let Some(log_store) = app.try_state::<RequestLogStore>() {
+        log_store.with_current(|log| {
+            log.warn("Recording cancelled by user");
+            log.complete_cancelled();
+        });
+        log_store.complete_current();
+    }
+
+    // Best-effort: remove any in-progress history entry for this request.
+    if let Some(req_id) = active_request_id.as_deref() {
+        if let Some(history) = app.try_state::<HistoryStorage>() {
+            let _ = history.delete(req_id);
+            let _ = app.emit("history-changed", ());
+        }
+    }
+
+    // Cancel pipeline
+    if let Some(pipeline) = app.try_state::<pipeline::SharedPipeline>() {
+        pipeline.cancel();
+    }
+
+    // Hide overlay if in recording-only mode.
+    let overlay_mode: String = get_setting_from_store(app, "overlay_mode", "always".to_string());
+    if overlay_mode == "recording_only" {
+        let _ = app.emit("overlay-hide-requested", ());
+
+        if let Some(window) = app.get_webview_window("overlay") {
+            let window_clone = window.clone();
+            let app_check = app.clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_millis(220)).await;
+                let current_mode: String =
+                    get_setting_from_store(&app_check, "overlay_mode", "always".to_string());
+                if current_mode == "recording_only" {
+                    let _ = window_clone.hide();
+                }
+            });
+        }
+    }
+
+    // Notify frontend
+    let _ = app.emit("pipeline-cancelled", ());
+
+    // Disable Escape shortcut now that we're idle.
+    set_escape_cancel_shortcut_enabled(app, false);
 }
 
 /// Handle a shortcut event - public so it can be called from commands/settings.rs

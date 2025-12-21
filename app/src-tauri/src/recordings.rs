@@ -27,6 +27,7 @@ impl RecordingStore {
         self.dir.join(format!("{}.wav", id))
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn has(&self, id: &str) -> bool {
         if let Ok(known) = self.known_existing.read() {
             if known.contains(id) {

@@ -84,6 +84,10 @@ pub fn pipeline_start_recording(
         CommandError::from(e)
     })?;
 
+    // While recording/transcribing, allow Escape to cancel without triggering transcription.
+    #[cfg(desktop)]
+    crate::set_escape_cancel_shortcut_enabled(&app, true);
+
     // Emit event to frontend
     let _ = app.emit("pipeline-recording-started", ());
 
@@ -96,6 +100,10 @@ pub async fn pipeline_stop_and_transcribe(
     app: AppHandle,
     pipeline: State<'_, SharedPipeline>,
 ) -> Result<String, CommandError> {
+    // Ensure Escape-to-cancel is available during the transcription phase.
+    #[cfg(desktop)]
+    crate::set_escape_cancel_shortcut_enabled(&app, true);
+
     // Try to capture the active request id for history + persistent audio.
     let active_request_id: Option<String> = app
         .try_state::<RequestLogStore>()
@@ -119,10 +127,29 @@ pub async fn pipeline_stop_and_transcribe(
         });
     }
 
-    let result = pipeline
-        .stop_and_transcribe_detailed()
-        .await
-        .map_err(|e| {
+    let result = match pipeline.stop_and_transcribe_detailed().await {
+        Ok(r) => r,
+        Err(PipelineError::Cancelled) => {
+            // User cancelled (Escape / cancel button). Treat as a normal outcome.
+            #[cfg(desktop)]
+            crate::set_escape_cancel_shortcut_enabled(&app, false);
+
+            // Best-effort: complete current request as cancelled.
+            if let Some(log_store) = app.try_state::<RequestLogStore>() {
+                log_store.with_current(|log| {
+                    log.warn("Recording cancelled by user");
+                    log.complete_cancelled();
+                });
+                log_store.complete_current();
+            }
+
+            let _ = app.emit("pipeline-cancelled", ());
+            return Ok(String::new());
+        }
+        Err(e) => {
+            #[cfg(desktop)]
+            crate::set_escape_cancel_shortcut_enabled(&app, false);
+
             if let Some(log_store) = app.try_state::<RequestLogStore>() {
                 log_store.with_current(|log| {
                     log.error(format!("Transcription failed: {}", e));
@@ -156,8 +183,9 @@ pub async fn pipeline_stop_and_transcribe(
             });
             let _ = app.emit("pipeline-error", payload);
 
-            CommandError::from(e)
-        })?;
+            return Err(CommandError::from(e));
+        }
+    };
 
     let final_text = result.final_text.clone();
 
@@ -242,6 +270,10 @@ pub async fn pipeline_stop_and_transcribe(
     // Emit transcript ready event
     let _ = app.emit("pipeline-transcript-ready", &final_text);
 
+    // Done transcribing - stop stealing Escape.
+    #[cfg(desktop)]
+    crate::set_escape_cancel_shortcut_enabled(&app, false);
+
     Ok(final_text)
 }
 
@@ -255,6 +287,10 @@ pub async fn pipeline_retry_transcription(
     pipeline: State<'_, SharedPipeline>,
     request_id: String,
 ) -> Result<String, CommandError> {
+    // Allow Escape-to-cancel while the retry transcription is running.
+    #[cfg(desktop)]
+    crate::set_escape_cancel_shortcut_enabled(&app, true);
+
     let recording_store = app
         .try_state::<RecordingStore>()
         .ok_or_else(|| CommandError::from("Recording store not available".to_string()))?;
@@ -280,10 +316,18 @@ pub async fn pipeline_retry_transcription(
     let _ = app.emit("pipeline-transcription-started", ());
 
     // Run the retry transcription (STT + optional LLM)
-    let result = pipeline
-        .transcribe_wav_bytes_detailed(wav.clone())
-        .await
-        .map_err(|e| {
+    let result = match pipeline.transcribe_wav_bytes_detailed(wav.clone()).await {
+        Ok(r) => r,
+        Err(PipelineError::Cancelled) => {
+            #[cfg(desktop)]
+            crate::set_escape_cancel_shortcut_enabled(&app, false);
+            let _ = app.emit("pipeline-cancelled", ());
+            return Ok(String::new());
+        }
+        Err(e) => {
+            #[cfg(desktop)]
+            crate::set_escape_cancel_shortcut_enabled(&app, false);
+
             if let Some(log_store) = app.try_state::<RequestLogStore>() {
                 log_store.with_current(|log| {
                     log.error(format!("Retry transcription failed: {}", e));
@@ -306,8 +350,9 @@ pub async fn pipeline_retry_transcription(
             });
             let _ = app.emit("pipeline-error", payload);
 
-            CommandError::from(e)
-        })?;
+            return Err(CommandError::from(e));
+        }
+    };
 
     // Persist audio under the *new* request id (best-effort)
     if let Some(req_id) = new_request_id.as_deref() {
@@ -350,6 +395,9 @@ pub async fn pipeline_retry_transcription(
     // Emit transcript ready event
     let _ = app.emit("pipeline-transcript-ready", &final_text);
 
+    #[cfg(desktop)]
+    crate::set_escape_cancel_shortcut_enabled(&app, false);
+
     Ok(final_text)
 }
 
@@ -359,21 +407,35 @@ pub fn pipeline_cancel(
     app: AppHandle,
     pipeline: State<'_, SharedPipeline>,
 ) -> Result<(), CommandError> {
-    // Log cancellation
-    if let Some(log_store) = app.try_state::<RequestLogStore>() {
-        log_store.with_current(|log| {
-            log.warn("Recording cancelled by user");
-            log.complete_cancelled();
-        });
-        log_store.complete_current();
+    // `pipeline` is kept for API stability; on desktop we delegate to a helper that
+    // re-acquires the shared pipeline from app state.
+    let _ = pipeline;
+
+    #[cfg(desktop)]
+    {
+        // Reuse the centralized cancel logic so audio mute/pause state is restored too.
+        crate::cancel_pipeline_session(&app, "Command");
+        return Ok(());
     }
 
-    pipeline.cancel();
+    #[cfg(not(desktop))]
+    {
+        // Log cancellation
+        if let Some(log_store) = app.try_state::<RequestLogStore>() {
+            log_store.with_current(|log| {
+                log.warn("Recording cancelled by user");
+                log.complete_cancelled();
+            });
+            log_store.complete_current();
+        }
 
-    // Emit cancelled event
-    let _ = app.emit("pipeline-cancelled", ());
+        pipeline.cancel();
 
-    Ok(())
+        // Emit cancelled event
+        let _ = app.emit("pipeline-cancelled", ());
+
+        Ok(())
+    }
 }
 
 /// Get the current pipeline state
@@ -464,6 +526,10 @@ pub async fn pipeline_dictate(
     app: AppHandle,
     pipeline: State<'_, SharedPipeline>,
 ) -> Result<String, CommandError> {
+    // Ensure Escape-to-cancel remains available while we transcribe.
+    #[cfg(desktop)]
+    crate::set_escape_cancel_shortcut_enabled(&app, true);
+
     // Log transcription start
     if let Some(log_store) = app.try_state::<RequestLogStore>() {
         log_store.with_current(|log| {
@@ -474,10 +540,18 @@ pub async fn pipeline_dictate(
     // Stop and transcribe
     let _ = app.emit("pipeline-transcription-started", ());
 
-    let result = pipeline
-        .stop_and_transcribe_detailed()
-        .await
-        .map_err(|e| {
+    let result = match pipeline.stop_and_transcribe_detailed().await {
+        Ok(r) => r,
+        Err(PipelineError::Cancelled) => {
+            #[cfg(desktop)]
+            crate::set_escape_cancel_shortcut_enabled(&app, false);
+            let _ = app.emit("pipeline-cancelled", ());
+            return Ok(String::new());
+        }
+        Err(e) => {
+            #[cfg(desktop)]
+            crate::set_escape_cancel_shortcut_enabled(&app, false);
+
             if let Some(log_store) = app.try_state::<RequestLogStore>() {
                 log_store.with_current(|log| {
                     log.error(format!("Transcription failed: {}", e));
@@ -485,8 +559,9 @@ pub async fn pipeline_dictate(
                 });
                 log_store.complete_current();
             }
-            CommandError::from(e)
-        })?;
+            return Err(CommandError::from(e));
+        }
+    };
 
     let final_text = result.final_text.clone();
 
@@ -566,6 +641,9 @@ pub async fn pipeline_dictate(
         log_store.complete_current();
     }
 
+    #[cfg(desktop)]
+    crate::set_escape_cancel_shortcut_enabled(&app, false);
+
     Ok(final_text)
 }
 
@@ -603,6 +681,9 @@ pub async fn pipeline_toggle(
             log::warn!("Toggle: Failed to start recording: {}", e);
             CommandError::from(e)
         })?;
+
+        #[cfg(desktop)]
+        crate::set_escape_cancel_shortcut_enabled(&app, true);
 
         // Pipeline started successfully - now create the request log
         if let Some(log_store) = app.try_state::<RequestLogStore>() {
@@ -644,6 +725,9 @@ pub fn pipeline_force_reset(
 ) -> Result<(), CommandError> {
     pipeline.force_reset();
     log::info!("Pipeline force reset to Idle state");
+
+    #[cfg(desktop)]
+    crate::set_escape_cancel_shortcut_enabled(&app, false);
 
     // Emit reset event
     let _ = app.emit("pipeline-reset", ());

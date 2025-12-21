@@ -1,5 +1,5 @@
 use crate::settings::HotkeyConfig;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 #[cfg(desktop)]
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
@@ -88,6 +88,14 @@ pub async fn register_shortcuts(app: AppHandle) -> Result<(), String> {
             crate::handle_shortcut_event(app, shortcut, &event);
         })
         .map_err(|e| format!("Failed to register shortcuts: {}", e))?;
+
+    // If we're currently recording/transcribing, re-enable Escape-to-cancel.
+    // (Registering hotkeys unregisters all shortcuts, which would otherwise drop Escape.)
+    let should_enable_escape = app
+        .try_state::<crate::pipeline::SharedPipeline>()
+        .map(|p| p.state().can_cancel())
+        .unwrap_or(false);
+    crate::set_escape_cancel_shortcut_enabled(&app, should_enable_escape);
 
     log::info!("Shortcuts re-registered successfully");
     Ok(())
