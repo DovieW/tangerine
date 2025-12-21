@@ -1,12 +1,12 @@
 import { Loader } from "@mantine/core";
-import { useResizeObserver, useTimeout } from "@mantine/hooks";
+import { useResizeObserver } from "@mantine/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useDrag } from "@use-gesture/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Logo from "./assets/logo.svg?react";
-import { useAddHistoryEntry, useSettings, useTypeText } from "./lib/queries";
+import { useSettings, useTypeText } from "./lib/queries";
 import { type ConnectionState, tauriAPI } from "./lib/tauri";
 import "./app.css";
 
@@ -14,6 +14,11 @@ import "./app.css";
  * Pipeline state machine states (matches Rust PipelineState)
  */
 type PipelineState = "idle" | "recording" | "transcribing" | "error";
+
+type PipelineErrorPayload = {
+  message: string;
+  request_id?: string | null;
+};
 
 /**
  * Error info for user feedback
@@ -29,18 +34,27 @@ interface ErrorInfo {
 function parseError(error: unknown): ErrorInfo {
   const errorStr = String(error);
 
+  // Missing persisted audio (retry can't run)
+  if (
+    errorStr.includes("Failed to read recording") ||
+    errorStr.includes("Recording store") ||
+    errorStr.includes("Cannot save recording")
+  ) {
+    return { message: "No saved audio", recoverable: true };
+  }
+
   // Network/API errors
   if (errorStr.includes("Network") || errorStr.includes("network")) {
-    return { message: "Network error - check connection", recoverable: true };
+    return { message: "Network error", recoverable: true };
   }
   if (errorStr.includes("timeout") || errorStr.includes("Timeout")) {
-    return { message: "Request timed out - try again", recoverable: true };
+    return { message: "Timed out", recoverable: true };
   }
   if (errorStr.includes("API error") || errorStr.includes("401")) {
-    return { message: "API error - check API key", recoverable: true };
+    return { message: "API error", recoverable: true };
   }
   if (errorStr.includes("rate limit") || errorStr.includes("429")) {
-    return { message: "Rate limited - wait and retry", recoverable: true };
+    return { message: "Rate limited", recoverable: true };
   }
 
   // Provider errors
@@ -65,7 +79,12 @@ function parseError(error: unknown): ErrorInfo {
   }
 
   // Generic fallback
-  return { message: "An error occurred", recoverable: true };
+  // If we have a real message, keep it short-ish and let the UI tooltip show the full text.
+  const trimmed = errorStr.trim();
+  if (trimmed && trimmed.length <= 64) {
+    return { message: trimmed, recoverable: true };
+  }
+  return { message: "Error", recoverable: true };
 }
 
 /**
@@ -168,6 +187,20 @@ function AudioWave({
       const points = 64;
       const wave = new Float32Array(points);
 
+      const applyEdgeTaper = (v: number, i: number, n: number) => {
+        // Make the waveform return to baseline at the start/end so it doesn't look
+        // "cut off" by the canvas edge.
+        const last = n - 1;
+        if (last <= 0) return 0;
+        const edgePoints = Math.max(6, Math.floor(n * 0.1));
+        const d = Math.min(i, last - i);
+        if (d >= edgePoints) return v;
+        const t = d / edgePoints; // 0..1
+        // Raised cosine ramp: 0 at the edge, 1 after edgePoints.
+        const w = 0.5 - 0.5 * Math.cos(Math.PI * t);
+        return v * w;
+      };
+
       const drawIdle = (t: number) => {
         if (!mounted) return;
 
@@ -204,9 +237,13 @@ function AudioWave({
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
         ctx.beginPath();
+        // Avoid clipping stroke caps at the canvas edges.
+        const xPad = 2;
+        const xSpan = Math.max(1, logicalW - xPad * 2);
         for (let i = 0; i < points; i++) {
-          const x = (i / (points - 1)) * logicalW;
-          const y = midY + (wave[i] ?? 0) * amp;
+          const x = xPad + (i / (points - 1)) * xSpan;
+          const tapered = applyEdgeTaper(wave[i] ?? 0, i, points);
+          const y = midY + tapered * amp;
           if (i === 0) ctx.moveTo(x, y);
           else ctx.lineTo(x, y);
         }
@@ -395,6 +432,18 @@ function AudioWave({
 
           const wave = lastPointsRef.current ?? next;
 
+          const applyEdgeTaper = (v: number, i: number, n: number) => {
+            // Visually taper the waveform to a point at both ends.
+            const last = n - 1;
+            if (last <= 0) return 0;
+            const edgePoints = Math.max(8, Math.floor(n * 0.1));
+            const d = Math.min(i, last - i);
+            if (d >= edgePoints) return v;
+            const t = d / edgePoints; // 0..1
+            const w = 0.5 - 0.5 * Math.cos(Math.PI * t);
+            return v * w;
+          };
+
           const midY = logicalH / 2;
           // Taller peaks when voice is present.
           const amp = logicalH * (0.58 + voiceEnergy * 0.28);
@@ -414,10 +463,15 @@ function AudioWave({
             ctx.shadowColor = "rgba(255,255,255,0.35)";
             ctx.shadowBlur = blur;
 
+            // Prevent stroke end caps from being clipped by the canvas bounds.
+            const xPad = Math.max(2, lineWidth * 0.75);
+            const xSpan = Math.max(1, logicalW - xPad * 2);
+
             ctx.beginPath();
             for (let i = 0; i < points; i++) {
-              const x = (i / (points - 1)) * logicalW;
-              const y = midY + (wave[i] ?? 0) * amp;
+              const x = xPad + (i / (points - 1)) * xSpan;
+              const tapered = applyEdgeTaper(wave[i] ?? 0, i, points);
+              const y = midY + tapered * amp;
               if (i === 0) ctx.moveTo(x, y);
               else ctx.lineTo(x, y);
             }
@@ -461,6 +515,10 @@ function RecordingControl() {
   const queryClient = useQueryClient();
   const [pipelineState, setPipelineState] = useState<PipelineState>("idle");
   const [lastError, setLastError] = useState<ErrorInfo | null>(null);
+  const [lastErrorDetail, setLastErrorDetail] = useState<string | null>(null);
+  const [lastFailedRequestId, setLastFailedRequestId] = useState<string | null>(
+    null
+  );
   const [containerRef, rect] = useResizeObserver();
   const hasDragStartedRef = useRef(false);
   const [animState, setAnimState] = useState<"enter" | "visible" | "exit">(
@@ -480,31 +538,6 @@ function RecordingControl() {
 
   // TanStack Query hooks
   const typeTextMutation = useTypeText();
-  const addHistoryEntry = useAddHistoryEntry();
-
-  // Clear error after 5 seconds
-  const { start: startErrorTimeout, clear: clearErrorTimeout } = useTimeout(
-    () => {
-      setLastError(null);
-    },
-    5000
-  );
-
-  // Response timeout: keep the UI watchdog aligned with the backend transcription timeout.
-  // Add a small buffer so the UI does not reset before the pipeline times out.
-  const responseTimeoutMs = Math.max(
-    10_000,
-    Math.round(((settings?.stt_timeout_seconds ?? 60) + 5) * 1000)
-  );
-
-  const { start: startResponseTimeout, clear: clearResponseTimeout } =
-    useTimeout(() => {
-      if (pipelineState === "transcribing") {
-        // Reset to idle on timeout
-        setPipelineState("idle");
-        invoke("pipeline_force_reset").catch(console.error);
-      }
-    }, responseTimeoutMs);
 
   // Emit connection state changes to other windows
   useEffect(() => {
@@ -614,6 +647,19 @@ function RecordingControl() {
     }, 210);
   }, []);
 
+  const dismissError = useCallback(() => {
+    // Reset pipeline state in backend so polling reflects reality.
+    invoke("pipeline_force_reset").catch(console.error);
+    setLastError(null);
+    setLastErrorDetail(null);
+    setLastFailedRequestId(null);
+
+    // If we force-showed the window for an error (recording_only/never), allow the user to hide it.
+    if (settings?.overlay_mode !== "always") {
+      requestAnimatedHide();
+    }
+  }, [requestAnimatedHide, settings?.overlay_mode]);
+
   const requestAnimatedShow = useCallback(() => {
     if (exitTimerRef.current) {
       window.clearTimeout(exitTimerRef.current);
@@ -675,7 +721,8 @@ function RecordingControl() {
 
     // Clear any previous error when starting
     setLastError(null);
-    clearErrorTimeout();
+    setLastErrorDetail(null);
+    setLastFailedRequestId(null);
 
     try {
       await invoke("pipeline_start_recording");
@@ -684,9 +731,9 @@ function RecordingControl() {
       console.error("[Pipeline] Failed to start recording:", error);
       const errorInfo = parseError(error);
       setLastError(errorInfo);
-      startErrorTimeout();
+      setLastErrorDetail(String(error));
     }
-  }, [pipelineState, clearErrorTimeout, startErrorTimeout]);
+  }, [pipelineState]);
 
   // Stop recording and transcribe
   const onStopRecording = useCallback(async () => {
@@ -694,10 +741,8 @@ function RecordingControl() {
 
     try {
       setPipelineState("transcribing");
-      startResponseTimeout();
 
       const transcript = await invoke<string>("pipeline_stop_and_transcribe");
-      clearResponseTimeout();
 
       if (transcript) {
         // Type the transcript
@@ -707,41 +752,55 @@ function RecordingControl() {
           console.error("[Pipeline] Failed to type text:", error);
           const errorInfo = parseError(error);
           setLastError(errorInfo);
-          startErrorTimeout();
+          setLastErrorDetail(String(error));
         }
-        // Add to history
-        addHistoryEntry.mutate(transcript);
       }
 
       setPipelineState("idle");
+      setLastError(null);
+      setLastErrorDetail(null);
+      setLastFailedRequestId(null);
     } catch (error) {
       console.error("[Pipeline] Failed to stop and transcribe:", error);
-      clearResponseTimeout();
       setPipelineState("error");
 
       // Show error to user
       const errorInfo = parseError(error);
       setLastError(errorInfo);
-      startErrorTimeout();
-
-      // Attempt to recover
-      setTimeout(async () => {
-        try {
-          await invoke("pipeline_force_reset");
-          setPipelineState("idle");
-        } catch (resetError) {
-          console.error("[Pipeline] Failed to reset:", resetError);
-        }
-      }, 1000);
+      setLastErrorDetail(String(error));
     }
-  }, [
-    pipelineState,
-    startResponseTimeout,
-    clearResponseTimeout,
-    typeTextMutation,
-    addHistoryEntry,
-    startErrorTimeout,
-  ]);
+  }, [pipelineState, typeTextMutation]);
+
+  const onRetry = useCallback(async () => {
+    if (!lastFailedRequestId) return;
+    try {
+      setPipelineState("transcribing");
+      setLastError(null);
+      setLastErrorDetail(null);
+
+      const transcript = await invoke<string>("pipeline_retry_transcription", {
+        requestId: lastFailedRequestId,
+      });
+
+      if (transcript) {
+        try {
+          await typeTextMutation.mutateAsync(transcript);
+        } catch (error) {
+          console.error("[Pipeline] Failed to type retry transcript:", error);
+          setLastError(parseError(error));
+          setLastErrorDetail(String(error));
+        }
+      }
+
+      setPipelineState("idle");
+      setLastFailedRequestId(null);
+    } catch (error) {
+      console.error("[Pipeline] Retry failed:", error);
+      setPipelineState("error");
+      setLastError(parseError(error));
+      setLastErrorDetail(String(error));
+    }
+  }, [lastFailedRequestId, typeTextMutation]);
 
   // Hotkey event listeners
   // Listen for recording state changes from shortcuts (Rust handles the actual recording)
@@ -756,7 +815,6 @@ function RecordingControl() {
       });
       unlistenStop = await tauriAPI.onStopRecording(() => {
         setPipelineState("transcribing");
-        startResponseTimeout();
       });
     };
 
@@ -766,7 +824,7 @@ function RecordingControl() {
       unlistenStart?.();
       unlistenStop?.();
     };
-  }, [startResponseTimeout]);
+  }, []);
 
   // Listen for pipeline events from Rust
   useEffect(() => {
@@ -782,52 +840,47 @@ function RecordingControl() {
       unlisteners.push(
         await listen("pipeline-transcription-started", () => {
           setPipelineState("transcribing");
-          startResponseTimeout();
         })
       );
 
       unlisteners.push(
         await listen("pipeline-cancelled", () => {
           setPipelineState("idle");
-          clearResponseTimeout();
+          setLastError(null);
+          setLastErrorDetail(null);
+          setLastFailedRequestId(null);
         })
       );
 
       unlisteners.push(
         await listen("pipeline-reset", () => {
           setPipelineState("idle");
-          clearResponseTimeout();
+          setLastError(null);
+          setLastErrorDetail(null);
+          setLastFailedRequestId(null);
         })
       );
 
       // Listen for pipeline errors (e.g., transcription failures from hotkey-triggered recordings)
       unlisteners.push(
-        await listen<string>("pipeline-error", (event) => {
+        await listen<PipelineErrorPayload>("pipeline-error", (event) => {
           console.error("[Pipeline] Error from Rust:", event.payload);
-          clearResponseTimeout();
           setPipelineState("error");
 
-          const errorInfo = parseError(event.payload);
+          const errorInfo = parseError(event.payload?.message);
           setLastError(errorInfo);
-          startErrorTimeout();
-
-          // Attempt to recover after showing error
-          setTimeout(async () => {
-            try {
-              await invoke("pipeline_force_reset");
-              setPipelineState("idle");
-            } catch (resetError) {
-              console.error("[Pipeline] Failed to reset:", resetError);
-            }
-          }, 1000);
+          setLastErrorDetail(event.payload?.message ?? null);
+          setLastFailedRequestId(event.payload?.request_id ?? null);
         })
       );
 
       // Listen for successful transcription (from hotkey-triggered recordings)
       unlisteners.push(
         await listen<string>("pipeline-transcript-ready", () => {
-          clearResponseTimeout();
           setPipelineState("idle");
+          setLastError(null);
+          setLastErrorDetail(null);
+          setLastFailedRequestId(null);
         })
       );
     };
@@ -839,7 +892,7 @@ function RecordingControl() {
         unlisten();
       }
     };
-  }, [clearResponseTimeout, startResponseTimeout, startErrorTimeout]);
+  }, []);
 
   // Listen for settings changes from main window
   useEffect(() => {
@@ -870,7 +923,7 @@ function RecordingControl() {
       return;
     }
 
-    if (pipelineState === "idle") {
+    if (pipelineState === "idle" || pipelineState === "error") {
       if (!expanded) {
         setExpanded(true);
       }
@@ -906,7 +959,7 @@ function RecordingControl() {
 
   const isLoading = pipelineState === "transcribing";
   const isRecording = pipelineState === "recording";
-  const isError = pipelineState === "error" || lastError !== null;
+  const isError = pipelineState === "error";
 
   const renderIcon = () => {
     if (isLoading) return <Loader size="xs" color="white" />;
@@ -964,8 +1017,12 @@ function RecordingControl() {
             <div className="overlay-icon">{renderIcon()}</div>
             <div className="overlay-center">
               {isError && lastError ? (
-                <div className="overlay-error-text" title={lastError.message}>
-                  {lastError.message}
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 4 }}
+                >
+                  <div className="overlay-error-text" title={lastError.message}>
+                    {lastError.message}
+                  </div>
                 </div>
               ) : (
                 <AudioWave
@@ -978,10 +1035,48 @@ function RecordingControl() {
             <div className="overlay-meta">
               <div
                 className="overlay-pill"
-                data-variant={isRecording ? "rec" : "dim"}
+                data-variant={isError ? "dim" : isRecording ? "rec" : "dim"}
+                role={isError && !!lastFailedRequestId ? "button" : undefined}
+                tabIndex={isError && !!lastFailedRequestId ? 0 : undefined}
+                onClick={(e) => {
+                  if (!isError || !lastFailedRequestId) return;
+                  e.stopPropagation();
+                  onRetry();
+                }}
+                onKeyDown={(e) => {
+                  if (!isError || !lastFailedRequestId) return;
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onRetry();
+                  }
+                }}
               >
-                REC
+                {isError ? "Retry" : "REC"}
               </div>
+
+              {isError ? (
+                <div
+                  className="overlay-pill overlay-pill--close"
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Close"
+                  title="Close"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    dismissError();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      dismissError();
+                    }
+                  }}
+                >
+                  ×
+                </div>
+              ) : null}
             </div>
           </button>
         ) : null}
