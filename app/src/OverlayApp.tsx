@@ -204,7 +204,7 @@ function AudioWave({
         ctx.beginPath();
         for (let i = 0; i < points; i++) {
           const x = (i / (points - 1)) * logicalW;
-          const y = midY + wave[i] * amp;
+          const y = midY + (wave[i] ?? 0) * amp;
           if (i === 0) ctx.moveTo(x, y);
           else ctx.lineTo(x, y);
         }
@@ -311,7 +311,9 @@ function AudioWave({
             lastPointsRef.current = next;
           } else {
             for (let i = 0; i < points; i++) {
-              prev[i] = prev[i] * 0.72 + next[i] * 0.28;
+              const prevVal = prev[i] ?? 0;
+              const nextVal = next[i] ?? 0;
+              prev[i] = prevVal * 0.72 + nextVal * 0.28;
             }
             lastPointsRef.current = prev;
           }
@@ -338,7 +340,7 @@ function AudioWave({
             ctx.beginPath();
             for (let i = 0; i < points; i++) {
               const x = (i / (points - 1)) * logicalW;
-              const y = midY + wave[i] * amp;
+              const y = midY + (wave[i] ?? 0) * amp;
               if (i === 0) ctx.moveTo(x, y);
               else ctx.lineTo(x, y);
             }

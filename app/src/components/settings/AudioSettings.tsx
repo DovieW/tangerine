@@ -83,7 +83,7 @@ export function AudioSettings({
             min={0}
             max={5}
             step={0.05}
-            precision={2}
+            decimalScale={2}
             disabled={isProfileScope || !quietAudioGateEnabled}
             styles={{
               input: {

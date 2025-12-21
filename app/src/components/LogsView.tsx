@@ -168,6 +168,14 @@ function RequestLogItem({ log }: { log: RequestLog }) {
   // NOTE: `llm_provider`/`llm_model` can reflect configured defaults.
   // Use `llm_duration_ms` to indicate whether an LLM rewrite was actually attempted.
   const llmAttempted = log.llm_duration_ms !== null;
+  const totalDurationMs = (() => {
+    if (!log.ended_at) return null;
+    const start = Date.parse(log.started_at);
+    const end = Date.parse(log.ended_at);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+    if (end < start) return null;
+    return end - start;
+  })();
   const llmProviderLabel = log.llm_provider ?? "unknown";
   const sttMetaLabel = `${log.stt_provider}${
     log.stt_model ? ` / ${log.stt_model}` : ""
@@ -196,14 +204,14 @@ function RequestLogItem({ log }: { log: RequestLog }) {
             </Text>
           </Group>
           <Group gap="xs" wrap="nowrap">
-            {log.total_duration_ms && (
+            {totalDurationMs !== null && (
               <Badge
                 variant="light"
                 size="sm"
                 color="violet"
                 leftSection={<Clock size={12} />}
               >
-                Total: {formatDuration(log.total_duration_ms)}
+                Total: {formatDuration(totalDurationMs)}
               </Badge>
             )}
             {getStatusBadge(log.status)}
