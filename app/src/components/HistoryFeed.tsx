@@ -1,15 +1,34 @@
-import { ActionIcon, Button, Group, Modal, Text } from "@mantine/core";
+import {
+	ActionIcon,
+	Button,
+	Group,
+	Modal,
+	Text,
+	TextInput,
+} from "@mantine/core";
 import { useClipboard, useDisclosure } from "@mantine/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { format, isToday, isYesterday } from "date-fns";
-import { Copy, MessageSquare, Trash2 } from "lucide-react";
-import { useEffect } from "react";
+import {
+	ChevronLeft,
+	ChevronRight,
+	ChevronsLeft,
+	ChevronsRight,
+	Copy,
+	MessageSquare,
+	Search,
+	Trash2,
+	X,
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import {
 	useClearHistory,
 	useDeleteHistoryEntry,
 	useHistory,
 } from "../lib/queries";
 import { tauriAPI } from "../lib/tauri";
+
+const HISTORY_PAGE_SIZE = 25;
 
 function formatTime(timestamp: string): string {
 	return format(new Date(timestamp), "h:mm a");
@@ -49,12 +68,14 @@ function groupHistoryByDate(
 
 export function HistoryFeed() {
 	const queryClient = useQueryClient();
-	const { data: history, isLoading, error } = useHistory(100);
+	const { data: history, isLoading, error } = useHistory();
 	const deleteEntry = useDeleteHistoryEntry();
 	const clearHistory = useClearHistory();
 	const clipboard = useClipboard();
 	const [confirmOpened, { open: openConfirm, close: closeConfirm }] =
 		useDisclosure(false);
+	const [filterText, setFilterText] = useState("");
+	const [page, setPage] = useState(1);
 
 	// Listen for history changes from other windows (e.g., overlay after transcription)
 	useEffect(() => {
@@ -84,6 +105,36 @@ export function HistoryFeed() {
 			},
 		});
 	};
+
+	const filteredHistory = useMemo(() => {
+		if (!history) return [];
+		const query = filterText.trim().toLowerCase();
+		if (!query) return history;
+		return history.filter((entry) => entry.text.toLowerCase().includes(query));
+	}, [history, filterText]);
+
+	const totalPages = Math.max(
+		1,
+		Math.ceil(filteredHistory.length / HISTORY_PAGE_SIZE),
+	);
+
+	const canGoPrev = page > 1;
+	const canGoNext = page < totalPages;
+
+	// Keep the current page in bounds as history/filter changes.
+	useEffect(() => {
+		setPage((current) => Math.min(Math.max(1, current), totalPages));
+	}, [totalPages]);
+
+	// When the filter changes, reset to page 1 so results are predictable.
+	useEffect(() => {
+		setPage(1);
+	}, [filterText]);
+
+	const pageHistory = useMemo(() => {
+		const start = (page - 1) * HISTORY_PAGE_SIZE;
+		return filteredHistory.slice(start, start + HISTORY_PAGE_SIZE);
+	}, [filteredHistory, page]);
 
 	if (isLoading) {
 		return (
@@ -131,7 +182,7 @@ export function HistoryFeed() {
 		);
 	}
 
-	const groupedHistory = groupHistoryByDate(history);
+	const groupedHistory = groupHistoryByDate(pageHistory);
 
 	return (
 		<div className="animate-in animate-in-delay-2">
@@ -146,6 +197,93 @@ export function HistoryFeed() {
 				>
 					Clear All
 				</Button>
+			</div>
+
+			<div
+				style={{
+					display: "flex",
+					gap: 12,
+					alignItems: "center",
+					marginBottom: 16,
+					flexWrap: "wrap",
+				}}
+			>
+				<TextInput
+					value={filterText}
+					onChange={(e) => setFilterText(e.currentTarget.value)}
+					placeholder="Filter history…"
+					leftSection={<Search size={14} />}
+					rightSection={
+						filterText.trim().length > 0 ? (
+							<ActionIcon
+								variant="subtle"
+								size="sm"
+								color="gray"
+								onClick={() => setFilterText("")}
+								title="Clear filter"
+							>
+								<X size={14} />
+							</ActionIcon>
+						) : null
+					}
+					styles={{
+						input: {
+							backgroundColor: "var(--bg-card)",
+							borderColor: "var(--border-default)",
+							color: "var(--text-primary)",
+						},
+					}}
+					size="xs"
+					style={{ width: 240 }}
+				/>
+
+				<Text c="dimmed" size="xs" style={{ whiteSpace: "nowrap" }}>
+					{filteredHistory.length} result
+					{filteredHistory.length === 1 ? "" : "s"}
+				</Text>
+
+				<Group style={{ marginLeft: "auto" }} gap={6}>
+					<ActionIcon
+						variant="subtle"
+						size="sm"
+						color="gray"
+						onClick={() => setPage(1)}
+						disabled={!canGoPrev}
+						title="First page"
+					>
+						<ChevronsLeft size={16} />
+					</ActionIcon>
+					<ActionIcon
+						variant="subtle"
+						size="sm"
+						color="gray"
+						onClick={() => setPage((p) => Math.max(1, p - 1))}
+						disabled={!canGoPrev}
+						title="Previous page"
+					>
+						<ChevronLeft size={16} />
+					</ActionIcon>
+					<ActionIcon
+						variant="subtle"
+						size="sm"
+						color="gray"
+						onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+						disabled={!canGoNext}
+						title="Next page"
+					>
+						<ChevronRight size={16} />
+					</ActionIcon>
+					<ActionIcon
+						variant="subtle"
+						size="sm"
+						color="gray"
+						onClick={() => setPage(totalPages)}
+						disabled={!canGoNext}
+						title="Last page"
+					>
+						<ChevronsRight size={16} />
+					</ActionIcon>
+				</Group>
 			</div>
 
 			<Modal
@@ -173,47 +311,55 @@ export function HistoryFeed() {
 				</Group>
 			</Modal>
 
-			{groupedHistory.map((group) => (
-				<div key={group.date} style={{ marginBottom: 24 }}>
-					<p
-						className="section-title"
-						style={{ marginBottom: 12, fontSize: 11 }}
-					>
-						{group.date}
-					</p>
-					<div className="history-feed">
-						{group.items.map((entry) => (
-							<div key={entry.id} className="history-item">
-								<span className="history-time">
-									{formatTime(entry.timestamp)}
-								</span>
-								<p className="history-text">{entry.text}</p>
-								<div className="history-actions">
-									<ActionIcon
-										variant="subtle"
-										size="sm"
-										color="gray"
-										onClick={() => clipboard.copy(entry.text)}
-										title="Copy to clipboard"
-									>
-										<Copy size={14} />
-									</ActionIcon>
-									<ActionIcon
-										variant="subtle"
-										size="sm"
-										color="red"
-										onClick={() => handleDelete(entry.id)}
-										title="Delete"
-										disabled={deleteEntry.isPending}
-									>
-										<Trash2 size={14} />
-									</ActionIcon>
-								</div>
-							</div>
-						))}
-					</div>
+			{filteredHistory.length === 0 ? (
+				<div className="empty-state">
+					<MessageSquare className="empty-state-icon" />
+					<h4 className="empty-state-title">No matches</h4>
+					<p className="empty-state-text">Try a different filter.</p>
 				</div>
-			))}
+			) : (
+				groupedHistory.map((group) => (
+					<div key={group.date} style={{ marginBottom: 24 }}>
+						<p
+							className="section-title"
+							style={{ marginBottom: 12, fontSize: 11 }}
+						>
+							{group.date}
+						</p>
+						<div className="history-feed">
+							{group.items.map((entry) => (
+								<div key={entry.id} className="history-item">
+									<span className="history-time">
+										{formatTime(entry.timestamp)}
+									</span>
+									<p className="history-text">{entry.text}</p>
+									<div className="history-actions">
+										<ActionIcon
+											variant="subtle"
+											size="sm"
+											color="gray"
+											onClick={() => clipboard.copy(entry.text)}
+											title="Copy to clipboard"
+										>
+											<Copy size={14} />
+										</ActionIcon>
+										<ActionIcon
+											variant="subtle"
+											size="sm"
+											color="red"
+											onClick={() => handleDelete(entry.id)}
+											title="Delete"
+											disabled={deleteEntry.isPending}
+										>
+											<Trash2 size={14} />
+										</ActionIcon>
+									</div>
+								</div>
+							))}
+						</div>
+					</div>
+				))
+			)}
 		</div>
 	);
 }
