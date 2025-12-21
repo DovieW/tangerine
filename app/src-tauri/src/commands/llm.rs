@@ -156,6 +156,9 @@ pub fn get_llm_providers() -> Vec<LlmProviderInfo> {
             requires_api_key: true,
             default_model: "gpt-4o-mini".to_string(),
             models: vec![
+                "gpt-4.1".to_string(),
+                "gpt-4.1-mini".to_string(),
+                "gpt-4.1-nano".to_string(),
                 "gpt-4o-mini".to_string(),
                 "gpt-4o".to_string(),
                 "gpt-4-turbo".to_string(),
