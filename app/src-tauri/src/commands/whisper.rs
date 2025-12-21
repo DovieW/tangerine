@@ -247,6 +247,7 @@ fn parse_model_id(model_id: &str) -> Result<WhisperModel, WhisperCommandError> {
     Ok(model)
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn format_size(bytes: u64) -> String {
     const KB: u64 = 1024;
     const MB: u64 = KB * 1024;

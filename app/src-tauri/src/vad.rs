@@ -52,6 +52,7 @@ pub struct VadConfig {
     /// Frame duration in milliseconds (10, 20, or 30ms supported by webrtc-vad)
     pub frame_duration_ms: u32,
     /// Sample rate to use for VAD (must be 8000, 16000, 32000, or 48000)
+    #[cfg_attr(not(test), allow(dead_code))]
     pub sample_rate: u32,
 }
 
@@ -76,6 +77,7 @@ pub enum VadEvent {
     /// Speech has started, includes pre-roll audio
     SpeechStart {
         /// Pre-roll audio samples (before speech was detected)
+        #[cfg_attr(not(test), allow(dead_code))]
         pre_roll: Vec<i16>,
     },
     /// Speech has ended
@@ -189,6 +191,7 @@ impl VoiceActivityDetector {
     }
 
     /// Reset the VAD state (call when starting a new recording session)
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn reset(&mut self) {
         self.is_speaking = false;
         self.silence_frames = 0;
@@ -197,6 +200,7 @@ impl VoiceActivityDetector {
     }
 
     /// Check if currently detecting speech
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn is_speaking(&self) -> bool {
         self.is_speaking
     }
@@ -208,6 +212,7 @@ impl VoiceActivityDetector {
     }
 
     /// Get the VAD configuration
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn config(&self) -> &VadConfig {
         &self.config
     }
@@ -360,6 +365,7 @@ impl VadFrameProcessor {
     }
 
     /// Reset the processor state
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn reset(&mut self) {
         self.vad.reset();
         self.frame_buffer.clear();
@@ -367,6 +373,7 @@ impl VadFrameProcessor {
     }
 
     /// Check if currently detecting speech
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn is_speaking(&self) -> bool {
         self.vad.is_speaking()
     }

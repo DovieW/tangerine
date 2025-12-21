@@ -31,6 +31,7 @@ impl OllamaLlmProvider {
     }
 
     /// Create with a specific model
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn with_model(model: String) -> Self {
         Self {
             client: Client::new(),
@@ -51,6 +52,7 @@ impl OllamaLlmProvider {
     }
 
     /// Create with custom client and settings
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn with_client(client: Client, base_url: Option<String>, model: Option<String>) -> Self {
         Self {
             client,
@@ -67,6 +69,7 @@ impl OllamaLlmProvider {
     }
 
     /// Check if Ollama is available at the configured URL
+    #[cfg_attr(not(test), allow(dead_code))]
     pub async fn is_available(&self) -> bool {
         let url = format!("{}/api/tags", self.base_url);
         self.client
@@ -78,6 +81,7 @@ impl OllamaLlmProvider {
     }
 
     /// List available models
+    #[cfg_attr(not(test), allow(dead_code))]
     pub async fn list_models(&self) -> Result<Vec<String>, LlmError> {
         let url = format!("{}/api/tags", self.base_url);
         let response = self
@@ -138,11 +142,13 @@ struct ChatResponseMessage {
     content: String,
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Deserialize)]
 struct TagsResponse {
     models: Vec<ModelInfo>,
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Deserialize)]
 struct ModelInfo {
     name: String,

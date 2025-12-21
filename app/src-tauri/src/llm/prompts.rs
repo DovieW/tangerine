@@ -146,6 +146,7 @@ impl Default for PromptSections {
 
 impl PromptSections {
     /// Create with all sections enabled and default prompts
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn all_enabled() -> Self {
         Self {
             main_custom: None,

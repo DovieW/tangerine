@@ -644,6 +644,12 @@ export const tauriAPI = {
     return value !== null && value !== undefined && value.length > 0;
   },
 
+  async getApiKey(storeKey: string): Promise<string | null> {
+    const store = await getStore();
+    const value = await store.get<string>(storeKey);
+    return value ?? null;
+  },
+
   async setApiKey(storeKey: string, apiKey: string): Promise<void> {
     const store = await getStore();
     await store.set(storeKey, apiKey);

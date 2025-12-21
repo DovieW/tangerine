@@ -33,9 +33,11 @@ pub enum AudioCaptureError {
     Encoding(String),
 
     #[error("Audio capture not active")]
+    #[cfg_attr(not(test), allow(dead_code))]
     NotActive,
 
     #[error("Capture thread error: {0}")]
+    #[cfg_attr(not(test), allow(dead_code))]
     ThreadError(String),
 }
 
@@ -74,16 +76,19 @@ impl AudioBuffer {
     }
 
     /// Clear all samples from the buffer
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn clear(&mut self) {
         self.samples.clear();
     }
 
     /// Get the number of samples in the buffer
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn len(&self) -> usize {
         self.samples.len()
     }
 
     /// Check if the buffer is empty
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn is_empty(&self) -> bool {
         self.samples.is_empty()
     }
@@ -156,11 +161,13 @@ impl AudioBuffer {
     }
 
     /// Get the sample rate
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn sample_rate(&self) -> u32 {
         self.sample_rate
     }
 
     /// Get the number of channels
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn channels(&self) -> u16 {
         self.channels
     }
@@ -196,6 +203,7 @@ pub struct VadAutoStopConfig {
     /// Enable VAD processing
     pub enabled: bool,
     /// Automatically stop recording when speech ends
+    #[cfg_attr(not(test), allow(dead_code))]
     pub auto_stop: bool,
     /// VAD configuration
     pub vad_config: VadConfig,
@@ -214,6 +222,7 @@ impl Default for VadAutoStopConfig {
 /// Handle to a running audio capture session
 struct CaptureHandle {
     command_tx: mpsc::Sender<CaptureCommand>,
+    #[cfg_attr(not(test), allow(dead_code))]
     event_rx: mpsc::Receiver<AudioCaptureEvent>,
     thread_handle: JoinHandle<Result<(), AudioCaptureError>>,
 }
@@ -259,6 +268,7 @@ impl AudioCapture {
     }
 
     /// Get the current VAD configuration
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn vad_config(&self) -> &VadAutoStopConfig {
         &self.vad_config
     }
@@ -331,6 +341,7 @@ impl AudioCapture {
     }
 
     /// Stop recording and return the captured audio as WAV bytes
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn stop_and_get_wav(&mut self) -> Result<Vec<u8>, AudioCaptureError> {
         let (wav_bytes, _stats) = self.stop_and_get_wav_with_stats()?;
         Ok(wav_bytes)
@@ -372,6 +383,7 @@ impl AudioCapture {
     }
 
     /// Check if currently recording
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn is_recording(&self) -> bool {
         self.capture_handle.is_some()
     }
@@ -380,6 +392,7 @@ impl AudioCapture {
     ///
     /// Returns the next VAD event if one is available, or None if no events are pending.
     /// This should be called periodically to check for speech start/end events.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn poll_vad_event(&self) -> Option<AudioCaptureEvent> {
         if let Some(ref handle) = self.capture_handle {
             handle.event_rx.try_recv().ok()
@@ -389,11 +402,13 @@ impl AudioCapture {
     }
 
     /// Check if VAD auto-stop is enabled
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn is_vad_auto_stop_enabled(&self) -> bool {
         self.vad_config.enabled && self.vad_config.auto_stop
     }
 
     /// Get the duration of recorded audio in seconds
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn duration_secs(&self) -> f32 {
         self.buffer
             .lock()
@@ -402,11 +417,13 @@ impl AudioCapture {
     }
 
     /// Get the sample rate
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn sample_rate(&self) -> u32 {
         self.sample_rate
     }
 
     /// Get the number of channels
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn channels(&self) -> u16 {
         self.channels
     }
@@ -574,6 +591,7 @@ fn run_capture_thread(
 }
 
 /// Get the list of available input devices
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn list_input_devices() -> Vec<String> {
     let host = cpal::default_host();
     host.input_devices()
@@ -586,6 +604,7 @@ pub fn list_input_devices() -> Vec<String> {
 }
 
 /// Get information about the default input device
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn get_default_input_device_info() -> Option<(String, u32, u16)> {
     let host = cpal::default_host();
     let device = host.default_input_device()?;

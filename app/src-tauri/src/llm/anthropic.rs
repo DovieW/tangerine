@@ -40,6 +40,7 @@ impl AnthropicLlmProvider {
     }
 
     /// Create with custom client and settings
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn with_client(client: Client, api_key: String, model: Option<String>) -> Self {
         Self {
             client,

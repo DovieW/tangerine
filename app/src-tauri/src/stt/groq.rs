@@ -32,6 +32,7 @@ impl GroqSttProvider {
     }
 
     /// Create a new provider with a custom HTTP client
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn with_client(client: reqwest::Client, api_key: String, model: Option<String>) -> Self {
         Self {
             client,
@@ -59,7 +60,8 @@ impl SttProvider for GroqSttProvider {
             .bearer_auth(&self.api_key)
             .multipart(form)
             .send()
-            .await?;
+            .await
+            .map_err(|e| if e.is_timeout() { SttError::Timeout } else { SttError::Network(e) })?;
 
         if !response.status().is_success() {
             let status = response.status();

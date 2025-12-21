@@ -29,6 +29,7 @@ impl Default for RetryConfig {
 
 impl RetryConfig {
     /// Create a new retry config with custom max retries
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn with_max_retries(max_retries: u32) -> Self {
         Self {
             max_retries,
@@ -45,8 +46,7 @@ impl RetryConfig {
     }
 }
 
-/// Determines if an error is retryable
-pub fn is_retryable_error(error: &SttError) -> bool {
+fn is_retryable_error_with_config(error: &SttError, config: &RetryConfig) -> bool {
     match error {
         SttError::Network(_) => true,
         SttError::Timeout => true,
@@ -56,13 +56,23 @@ pub fn is_retryable_error(error: &SttError) -> bool {
                 || msg.contains("502")
                 || msg.contains("503")
                 || msg.contains("504")
-                || msg.contains("429")
-                || msg.to_lowercase().contains("rate limit")
-                || msg.to_lowercase().contains("too many requests")
+                || (config.retry_on_rate_limit
+                    && (msg.contains("429")
+                        || msg.to_lowercase().contains("rate limit")
+                        || msg.to_lowercase().contains("too many requests")))
         }
         SttError::Audio(_) => false, // Don't retry audio errors
         SttError::Config(_) => false, // Don't retry config errors
     }
+}
+
+/// Determines if an error is retryable.
+///
+/// Note: this uses a default policy (including retrying rate-limit errors).
+/// If you need to respect a specific `RetryConfig`, use `with_retry`.
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn is_retryable_error(error: &SttError) -> bool {
+    is_retryable_error_with_config(error, &RetryConfig::default())
 }
 
 /// Execute an async function with retry logic
@@ -80,7 +90,7 @@ where
         match operation().await {
             Ok(result) => return Ok(result),
             Err(e) => {
-                if !is_retryable_error(&e) || attempt == config.max_retries {
+                if !is_retryable_error_with_config(&e, config) || attempt == config.max_retries {
                     return Err(e);
                 }
 

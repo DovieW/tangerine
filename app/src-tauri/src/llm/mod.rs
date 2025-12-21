@@ -64,11 +64,13 @@ pub trait LlmProvider: Send + Sync {
 }
 
 /// Registry of available LLM providers
+#[cfg_attr(not(test), allow(dead_code))]
 pub struct LlmRegistry {
     providers: Vec<Arc<dyn LlmProvider>>,
     current: String,
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 impl LlmRegistry {
     /// Create a new empty registry
     pub fn new() -> Self {
@@ -154,6 +156,7 @@ pub struct LlmConfig {
 /// the default `LlmConfig.prompts`.
 #[derive(Debug, Clone)]
 pub struct ProgramPromptProfile {
+    #[cfg_attr(not(test), allow(dead_code))]
     pub id: String,
     pub name: String,
     pub program_paths: Vec<String>,

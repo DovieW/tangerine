@@ -18,13 +18,13 @@ const API_KEYS: ApiKeyConfig[] = [
   {
     id: "groq",
     label: "Groq",
-    placeholder: "gsk_...",
+    placeholder: "Enter API key",
     storeKey: "groq_api_key",
   },
   {
     id: "openai",
     label: "OpenAI",
-    placeholder: "sk-...",
+    placeholder: "Enter API key",
     storeKey: "openai_api_key",
   },
   {
@@ -36,7 +36,7 @@ const API_KEYS: ApiKeyConfig[] = [
   {
     id: "anthropic",
     label: "Anthropic",
-    placeholder: "sk-ant-...",
+    placeholder: "Enter API key",
     storeKey: "anthropic_api_key",
   },
 ];
@@ -45,6 +45,7 @@ function ApiKeyInput({ config }: { config: ApiKeyConfig }) {
   const queryClient = useQueryClient();
   const [value, setValue] = useState("");
   const [isEditing, setIsEditing] = useState(false);
+  const [isPrefilling, setIsPrefilling] = useState(false);
 
   // Query to check if key is set
   const { data: hasKey } = useQuery({
@@ -96,6 +97,25 @@ function ApiKeyInput({ config }: { config: ApiKeyConfig }) {
     clearKey.mutate();
   };
 
+  const startEditing = async () => {
+    setIsEditing(true);
+
+    // If a key exists, prefill the input so the built-in Show/Hide toggle
+    // actually reveals something (instead of toggling an empty field).
+    if (!hasKey) return;
+
+    setIsPrefilling(true);
+    try {
+      const existingKey = await tauriAPI.getApiKey(config.storeKey);
+      setValue(existingKey ?? "");
+    } catch {
+      // If reading fails for any reason, fall back to empty and let the user re-enter.
+      setValue("");
+    } finally {
+      setIsPrefilling(false);
+    }
+  };
+
   if (!isEditing && hasKey) {
     return (
       <div className="settings-row">
@@ -108,11 +128,7 @@ function ApiKeyInput({ config }: { config: ApiKeyConfig }) {
             ✓ Set
           </Text>
           <Tooltip label="Change API key">
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              onClick={() => setIsEditing(true)}
-            >
+            <ActionIcon variant="subtle" color="gray" onClick={startEditing}>
               <Pencil size={16} />
             </ActionIcon>
           </Tooltip>
@@ -144,6 +160,7 @@ function ApiKeyInput({ config }: { config: ApiKeyConfig }) {
           value={value}
           onChange={(e) => setValue(e.currentTarget.value)}
           placeholder={config.placeholder}
+          disabled={isPrefilling || saveKey.isPending || clearKey.isPending}
           styles={{
             input: {
               backgroundColor: "var(--bg-elevated)",

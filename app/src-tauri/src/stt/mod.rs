@@ -27,8 +27,11 @@ use std::sync::Arc;
 /// Audio format information for STT processing
 #[derive(Debug, Clone)]
 pub struct AudioFormat {
+    #[cfg_attr(not(test), allow(dead_code))]
     pub sample_rate: u32,
+    #[cfg_attr(not(test), allow(dead_code))]
     pub channels: u8,
+    #[cfg_attr(not(test), allow(dead_code))]
     pub encoding: AudioEncoding,
 }
 
@@ -46,6 +49,7 @@ impl Default for AudioFormat {
 #[derive(Debug, Clone, Copy)]
 pub enum AudioEncoding {
     Wav,
+    #[cfg_attr(not(test), allow(dead_code))]
     Pcm16,
 }
 
@@ -82,6 +86,7 @@ pub trait SttProvider: Send + Sync {
     async fn transcribe(&self, audio: &[u8], format: &AudioFormat) -> Result<String, SttError>;
 
     /// Get the name of this provider
+    #[cfg_attr(not(test), allow(dead_code))]
     fn name(&self) -> &'static str;
 }
 
@@ -120,21 +125,25 @@ impl SttRegistry {
     }
 
     /// Get the current active provider
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn get_current(&self) -> Option<Arc<dyn SttProvider>> {
         self.providers.get(&self.current).cloned()
     }
 
     /// Get a provider by name
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn get(&self, name: &str) -> Option<Arc<dyn SttProvider>> {
         self.providers.get(name).cloned()
     }
 
     /// List all registered provider names
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn list_providers(&self) -> Vec<String> {
         self.providers.keys().cloned().collect()
     }
 
     /// Get the name of the current provider
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn current_name(&self) -> &str {
         &self.current
     }

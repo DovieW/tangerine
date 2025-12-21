@@ -128,6 +128,7 @@ impl RequestLog {
     }
 
     /// Log debug message
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn debug(&mut self, message: impl Into<String>) {
         self.log(LogLevel::Debug, message, None);
     }
@@ -148,6 +149,7 @@ impl RequestLog {
     }
 
     /// Log with details
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn info_with_details(&mut self, message: impl Into<String>, details: impl Into<String>) {
         self.log(LogLevel::Info, message, Some(details.into()));
     }

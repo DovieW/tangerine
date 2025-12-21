@@ -179,6 +179,7 @@ impl PipelineState {
 }
 
 /// Events emitted by the pipeline
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Clone)]
 pub enum PipelineEvent {
     /// Recording has started
@@ -574,6 +575,7 @@ impl SharedPipeline {
     }
 
     /// Stop recording and return the raw WAV audio
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn stop_recording(&self) -> Result<Vec<u8>, PipelineError> {
         let mut inner = self.inner.lock().map_err(|e| PipelineError::Lock(e.to_string()))?;
 
@@ -940,6 +942,7 @@ impl SharedPipeline {
     /// Stop recording and transcribe the audio.
     ///
     /// Kept for backwards compatibility. Prefer `stop_and_transcribe_detailed`.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub async fn stop_and_transcribe(&self) -> Result<String, PipelineError> {
         self.stop_and_transcribe_detailed()
             .await
@@ -977,6 +980,7 @@ impl SharedPipeline {
     /// Poll for VAD events (non-blocking)
     ///
     /// Returns the next VAD event if one is available, or None if no events are pending.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn poll_vad_event(&self) -> Option<AudioCaptureEvent> {
         self.inner
             .lock()
@@ -985,6 +989,7 @@ impl SharedPipeline {
     }
 
     /// Check if VAD auto-stop is enabled
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn is_vad_auto_stop_enabled(&self) -> bool {
         self.inner
             .lock()
@@ -1048,6 +1053,7 @@ impl SharedPipeline {
     }
 
     /// Get the name of the current STT provider
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn current_provider_name(&self) -> String {
         self.inner
             .lock()
@@ -1072,6 +1078,7 @@ impl SharedPipeline {
     }
 
     /// Get the cancellation token for external use (e.g., for coordinating with other async tasks)
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn get_cancel_token(&self) -> Option<CancellationToken> {
         self.inner
             .lock()
