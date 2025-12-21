@@ -49,9 +49,13 @@ impl OpenAiSttProvider {
         }
     }
 
-    /// Check if using GPT-4o audio model
-    fn is_gpt4o_audio(&self) -> bool {
-        self.model.contains("gpt-4o") && self.model.contains("audio")
+    /// Check if using an OpenAI chat-completions audio model.
+    ///
+    /// We treat any non-Whisper model that contains "audio" as a chat-completions
+    /// audio model (e.g., gpt-4o-audio-preview, gpt-4o-mini-audio-preview, gpt-audio,
+    /// gpt-audio-mini).
+    fn is_chat_audio_model(&self) -> bool {
+        self.model != "whisper-1" && self.model.contains("audio")
     }
 
     /// Transcribe using the legacy Whisper API
@@ -159,7 +163,7 @@ impl OpenAiSttProvider {
 #[async_trait]
 impl SttProvider for OpenAiSttProvider {
     async fn transcribe(&self, audio: &[u8], _format: &AudioFormat) -> Result<String, SttError> {
-        if self.is_gpt4o_audio() {
+        if self.is_chat_audio_model() {
             self.transcribe_gpt4o(audio).await
         } else {
             self.transcribe_whisper(audio).await
@@ -190,18 +194,28 @@ mod tests {
     }
 
     #[test]
-    fn test_is_gpt4o_audio() {
+    fn test_is_chat_audio_model() {
         let provider = OpenAiSttProvider::new("test-key".to_string(), None);
-        assert!(provider.is_gpt4o_audio());
+        assert!(provider.is_chat_audio_model());
 
         let provider = OpenAiSttProvider::new(
             "test-key".to_string(),
             Some("gpt-4o-mini-audio-preview".to_string()),
         );
-        assert!(provider.is_gpt4o_audio());
+        assert!(provider.is_chat_audio_model());
+
+        let provider =
+            OpenAiSttProvider::new("test-key".to_string(), Some("gpt-audio".to_string()));
+        assert!(provider.is_chat_audio_model());
+
+        let provider = OpenAiSttProvider::new(
+            "test-key".to_string(),
+            Some("gpt-audio-mini".to_string()),
+        );
+        assert!(provider.is_chat_audio_model());
 
         let provider =
             OpenAiSttProvider::new("test-key".to_string(), Some("whisper-1".to_string()));
-        assert!(!provider.is_gpt4o_audio());
+        assert!(!provider.is_chat_audio_model());
     }
 }

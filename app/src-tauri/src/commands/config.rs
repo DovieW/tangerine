@@ -165,7 +165,7 @@ pub struct AvailableProvidersResponse {
 
 /// STT provider definitions
 const STT_PROVIDERS: &[(&str, &str, bool)] = &[
-    ("openai", "OpenAI Whisper", false),
+    ("openai", "OpenAI", false),
     ("groq", "Groq", false),
     ("deepgram", "Deepgram", false),
     ("whisper", "Local Whisper", true),
@@ -176,7 +176,7 @@ const LLM_PROVIDERS: &[(&str, &str, bool)] = &[
     ("openai", "OpenAI", false),
     ("anthropic", "Anthropic", false),
     ("groq", "Groq", false),
-    ("ollama", "Ollama (Local)", true),
+    ("ollama", "Ollama", true),
 ];
 
 /// Helper to check if an API key is configured in the store

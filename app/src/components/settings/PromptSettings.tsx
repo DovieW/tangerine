@@ -56,9 +56,13 @@ const STT_MODELS: Record<string, { value: string; label: string }[]> = {
     { value: "whisper-large-v3-turbo", label: "Whisper Large V3 Turbo" },
   ],
   openai: [
+    { value: "gpt-audio", label: "GPT Audio" },
+    { value: "gpt-audio-mini", label: "GPT Audio Mini" },
     { value: "gpt-4o-audio-preview", label: "GPT-4o Audio Preview" },
     { value: "gpt-4o-mini-audio-preview", label: "GPT-4o Mini Audio Preview" },
-    { value: "whisper-1", label: "Whisper 1 (Legacy)" },
+    { value: "gpt-4o-transcribe", label: "GPT-4o Transcribe" },
+    { value: "gpt-4o-mini-transcribe", label: "GPT-4o Mini Transcribe" },
+    { value: "whisper-1", label: "Whisper" },
   ],
   deepgram: [
     { value: "nova-2", label: "Nova 2" },
@@ -77,6 +81,9 @@ const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
     { value: "mixtral-8x7b-32768", label: "Mixtral 8x7B" },
   ],
   openai: [
+    { value: "gpt-4.1", label: "GPT-4.1" },
+    { value: "gpt-4.1-mini", label: "GPT-4.1 Mini" },
+    { value: "gpt-4.1-nano", label: "GPT-4.1 Nano" },
     { value: "gpt-4o-mini", label: "GPT-4o Mini" },
     { value: "gpt-4o", label: "GPT-4o" },
     { value: "gpt-4-turbo", label: "GPT-4 Turbo" },

@@ -17,42 +17,49 @@ const DEFAULT_STT_TIMEOUT = 60;
 
 // Model options for each STT provider
 const STT_MODELS: Record<string, { value: string; label: string }[]> = {
-	groq: [
-		{ value: "whisper-large-v3", label: "Whisper Large V3" },
-		{ value: "whisper-large-v3-turbo", label: "Whisper Large V3 Turbo" },
-	],
-	openai: [
-		{ value: "gpt-4o-audio-preview", label: "GPT-4o Audio Preview" },
-		{ value: "gpt-4o-mini-audio-preview", label: "GPT-4o Mini Audio Preview" },
-		{ value: "whisper-1", label: "Whisper 1 (Legacy)" },
-	],
-	deepgram: [
-		{ value: "nova-2", label: "Nova 2" },
-		{ value: "nova", label: "Nova" },
-		{ value: "enhanced", label: "Enhanced" },
-		{ value: "base", label: "Base" },
-	],
-	whisper: [], // Local whisper has its own model management
+  groq: [
+    { value: "whisper-large-v3", label: "Whisper Large V3" },
+    { value: "whisper-large-v3-turbo", label: "Whisper Large V3 Turbo" },
+  ],
+  openai: [
+    { value: "gpt-audio", label: "GPT Audio" },
+    { value: "gpt-audio-mini", label: "GPT Audio Mini" },
+    { value: "gpt-4o-audio-preview", label: "GPT-4o Audio Preview" },
+    { value: "gpt-4o-mini-audio-preview", label: "GPT-4o Mini Audio Preview" },
+    { value: "gpt-4o-transcribe", label: "GPT-4o Transcribe" },
+    { value: "gpt-4o-mini-transcribe", label: "GPT-4o Mini Transcribe" },
+    { value: "whisper-1", label: "Whisper" },
+  ],
+  deepgram: [
+    { value: "nova-2", label: "Nova 2" },
+    { value: "nova", label: "Nova" },
+    { value: "enhanced", label: "Enhanced" },
+    { value: "base", label: "Base" },
+  ],
+  whisper: [], // Local whisper has its own model management
 };
 
 // Model options for each LLM provider
 const LLM_MODELS: Record<string, { value: string; label: string }[]> = {
-	groq: [
-		{ value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B Versatile" },
-		{ value: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant" },
-		{ value: "mixtral-8x7b-32768", label: "Mixtral 8x7B" },
-	],
-	openai: [
-		{ value: "gpt-4o-mini", label: "GPT-4o Mini" },
-		{ value: "gpt-4o", label: "GPT-4o" },
-		{ value: "gpt-4-turbo", label: "GPT-4 Turbo" },
-	],
-	anthropic: [
-		{ value: "claude-3-5-haiku-latest", label: "Claude 3.5 Haiku" },
-		{ value: "claude-3-5-sonnet-latest", label: "Claude 3.5 Sonnet" },
-		{ value: "claude-3-opus-latest", label: "Claude 3 Opus" },
-	],
-	ollama: [], // Ollama models are dynamic based on what's installed
+  groq: [
+    { value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B Versatile" },
+    { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant" },
+    { value: "mixtral-8x7b-32768", label: "Mixtral 8x7B" },
+  ],
+  openai: [
+    { value: "gpt-4.1", label: "GPT-4.1" },
+    { value: "gpt-4.1-mini", label: "GPT-4.1 Mini" },
+    { value: "gpt-4.1-nano", label: "GPT-4.1 Nano" },
+    { value: "gpt-4o-mini", label: "GPT-4o Mini" },
+    { value: "gpt-4o", label: "GPT-4o" },
+    { value: "gpt-4-turbo", label: "GPT-4 Turbo" },
+  ],
+  anthropic: [
+    { value: "claude-3-5-haiku-latest", label: "Claude 3.5 Haiku" },
+    { value: "claude-3-5-sonnet-latest", label: "Claude 3.5 Sonnet" },
+    { value: "claude-3-opus-latest", label: "Claude 3 Opus" },
+  ],
+  ollama: [], // Ollama models are dynamic based on what's installed
 };
 
 export function ProvidersSettings() {
