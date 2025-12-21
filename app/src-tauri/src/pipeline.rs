@@ -65,6 +65,18 @@ fn canonicalize_stt_provider_id(id: &str) -> String {
     }
 }
 
+/// Normalize STT output text.
+///
+/// Some providers (notably Whisper-based APIs) may include a leading space as a
+/// tokenization artifact (many vocabularies encode " space+word" as a single token).
+/// We trim only *leading* whitespace to avoid changing internal formatting.
+fn normalize_stt_text(text: String) -> String {
+    match text.chars().next() {
+        Some(c) if c.is_whitespace() => text.trim_start().to_string(),
+        _ => text,
+    }
+}
+
 fn seconds_to_duration_or(seconds: f64, fallback: Duration) -> Duration {
     // Guard against invalid values.
     if !seconds.is_finite() || seconds <= 0.0 {
@@ -747,7 +759,9 @@ impl SharedPipeline {
             }
 
             result = transcription_future => {
-                result.map_err(PipelineError::from)
+                result
+                    .map(normalize_stt_text)
+                    .map_err(PipelineError::from)
             }
         }
     }
@@ -988,7 +1002,7 @@ impl SharedPipeline {
         };
 
         let stt_text = match stt_result {
-            Ok(t) => t,
+            Ok(t) => normalize_stt_text(t),
             Err(e) => {
                 let mut inner = self
                     .inner
