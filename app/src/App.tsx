@@ -177,10 +177,6 @@ function InstructionsCard() {
           <span className="instruction-desc">Paste last result</span>
         </div>
       </div>
-      <p className="instructions-card-text">
-        Speak clearly and your words will be typed wherever your cursor is. The
-        overlay appears in the bottom-right corner of your screen.
-      </p>
     </div>
   );
 }
@@ -190,7 +186,7 @@ function HomeView() {
     <div className="main-content">
       <header className="animate-in" style={{ marginBottom: 32 }}>
         <Title order={1} mb={4}>
-          Welcome to Tambourine
+          Welcome to Tangerine
         </Title>
         <Text c="dimmed" size="sm">
           ~-~-~-~-~-~
@@ -296,7 +292,7 @@ function SettingsView() {
             <Tooltip label="New profile" withArrow>
               <ActionIcon
                 variant="subtle"
-                color="gray"
+                color="orange"
                 size="sm"
                 aria-label="New profile"
                 onClick={() => {
@@ -341,7 +337,7 @@ function SettingsView() {
             >
               <ActionIcon
                 variant="subtle"
-                color="gray"
+                color="orange"
                 size="sm"
                 aria-label="Profile config"
                 onClick={() => setProgramsModalOpen(true)}

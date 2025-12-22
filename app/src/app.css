@@ -1,5 +1,15 @@
 @import "tailwindcss";
 
+/*
+	Overlay bundle does not load app/src/styles.css (it needs transparent body).
+	Define the brand accents here too so the overlay logo + waveform can share them.
+*/
+:root {
+	--accent-primary: #f97316;
+	--accent-glow: rgba(249, 115, 22, 0.18);
+	--accent-hover: #fb923c;
+}
+
 /* Overlay-specific styles */
 html,
 body,
@@ -11,6 +21,8 @@ body {
 	overflow: hidden;
 	margin: 0;
 	padding: 0;
+	font-family:
+		"Sora", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 #root {
@@ -145,6 +157,13 @@ body {
 	flex: 0 0 auto;
 	border-radius: 12px;
 	background: rgba(255, 255, 255, 0.06);
+	/* Entire logo should be Tangerine orange. */
+	color: var(--accent-primary);
+}
+
+/* Tiny accent ring on hover to match the main app styling language. */
+.overlay-button:hover .overlay-icon {
+	box-shadow: 0 0 0 2px var(--accent-glow);
 }
 
 .overlay-center {
@@ -219,6 +238,11 @@ body {
 	max-width: 168px;
 	height: 24px;
 	display: block;
+}
+
+/* Waveform gets a tiny Tangerine glow only on hover (no always-on frame). */
+.overlay-button:hover .overlay-wave {
+	filter: drop-shadow(0 0 10px rgba(249, 115, 22, 0.18));
 }
 
 /* Hide tooltips/popups in overlay - use high specificity instead of !important */

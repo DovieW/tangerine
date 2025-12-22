@@ -1,4 +1,4 @@
-//! Performance benchmarks for the tambourine-voice pipeline.
+//! Performance benchmarks for the Tangerine pipeline.
 //!
 //! These benchmarks measure:
 //! - VAD frame processing latency

@@ -8,10 +8,10 @@ import { Switch, createTheme } from "@mantine/core";
  * make the two states look too similar.
  */
 export const darkTheme = createTheme({
-  primaryColor: "gray",
-  fontFamily: "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+  primaryColor: "orange",
+  fontFamily: "'Sora', -apple-system, BlinkMacSystemFont, sans-serif",
   headings: {
-    fontFamily: "'Instrument Serif', serif",
+    fontFamily: "'DM Serif Display', serif",
     fontWeight: "400",
   },
   colors: {

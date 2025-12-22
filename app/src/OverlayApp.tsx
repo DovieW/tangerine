@@ -171,6 +171,47 @@ function AudioWave({
   const noiseFloorRef = useRef(0);
   const voiceEnergyRef = useRef(0);
 
+  const getAccentRgb = useCallback(() => {
+    // Read from CSS so the overlay waveform matches the app brand accent.
+    const raw =
+      getComputedStyle(document.documentElement)
+        .getPropertyValue("--accent-primary")
+        .trim() || "#f97316";
+
+    // Minimal color parsing: supports #rgb/#rrggbb and rgb()/rgba().
+    const hex = raw.startsWith("#") ? raw.slice(1) : null;
+    if (hex) {
+      const h =
+        hex.length === 3
+          ? hex
+              .split("")
+              .map((c) => c + c)
+              .join("")
+          : hex;
+      if (h.length === 6) {
+        const r = Number.parseInt(h.slice(0, 2), 16);
+        const g = Number.parseInt(h.slice(2, 4), 16);
+        const b = Number.parseInt(h.slice(4, 6), 16);
+        if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)) {
+          return { r, g, b };
+        }
+      }
+    }
+
+    const m = raw
+      .replace(/\s+/g, "")
+      .match(/^rgba?\((\d+),(\d+),(\d+)(?:,(\d*\.?\d+))?\)$/i);
+    if (m) {
+      return {
+        r: Number.parseInt(m[1] ?? "0", 10),
+        g: Number.parseInt(m[2] ?? "0", 10),
+        b: Number.parseInt(m[3] ?? "0", 10),
+      };
+    }
+
+    return { r: 249, g: 115, b: 22 };
+  }, []);
+
   const cleanupAudio = useCallback(() => {
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
@@ -255,10 +296,11 @@ function AudioWave({
             (0.6 + 0.4 * Math.sin(phase * 0.9));
         }
 
+        const { r, g, b } = getAccentRgb();
         const grad = ctx.createLinearGradient(0, 0, logicalW, 0);
-        grad.addColorStop(0, "rgba(255,255,255,0.18)");
-        grad.addColorStop(0.5, "rgba(255,255,255,0.30)");
-        grad.addColorStop(1, "rgba(255,255,255,0.18)");
+        grad.addColorStop(0, `rgba(${r},${g},${b},0.18)`);
+        grad.addColorStop(0.5, `rgba(${r},${g},${b},0.32)`);
+        grad.addColorStop(1, `rgba(${r},${g},${b},0.18)`);
 
         ctx.save();
         ctx.lineWidth = 2;
@@ -557,9 +599,11 @@ function AudioWave({
           const maxAmp = Math.max(1, logicalH / 2 - 1);
           const amp = maxAmp * 0.95;
 
-          // Plain white waveform
-          const colorMid = `rgba(255,255,255,0.92)`;
-          const colorEdge = `rgba(255,255,255,0.60)`;
+          const { r, g, b } = getAccentRgb();
+
+          // Tangerine waveform
+          const colorMid = `rgba(${r},${g},${b},0.90)`;
+          const colorEdge = `rgba(${r},${g},${b},0.55)`;
 
           const grad = ctx.createLinearGradient(0, 0, logicalW, 0);
           grad.addColorStop(0, colorEdge);
@@ -573,7 +617,7 @@ function AudioWave({
             ctx.strokeStyle = grad;
             ctx.lineCap = "round";
             ctx.lineJoin = "round";
-            ctx.shadowColor = "rgba(255,255,255,0.35)";
+            ctx.shadowColor = `rgba(${r},${g},${b},0.35)`;
             ctx.shadowBlur = blur;
 
             // Prevent stroke end caps from being clipped by the canvas bounds.
@@ -611,7 +655,7 @@ function AudioWave({
       mounted = false;
       cleanupAudio();
     };
-  }, [cleanupAudio, isActive, isVisible, selectedMicId]);
+  }, [cleanupAudio, getAccentRgb, isActive, isVisible, selectedMicId]);
 
   return (
     <canvas
@@ -1096,7 +1140,7 @@ function RecordingControl() {
       : null;
 
   const renderIcon = () => {
-    if (isLoading) return <Loader size="xs" color="white" />;
+    if (isLoading) return <Loader size="xs" color="orange" />;
     if (isError) {
       return (
         <div style={{ color: "#ef4444" }} aria-label="Error">
@@ -1253,7 +1297,7 @@ export default function OverlayApp() {
           borderRadius: 16,
         }}
       >
-        <Loader size="xs" color="white" />
+        <Loader size="xs" color="orange" />
       </div>
     );
   }

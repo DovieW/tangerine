@@ -741,7 +741,7 @@ export function PromptSettings({
           padding: "20px",
         }}
       >
-        <Loader size="sm" color="gray" />
+        <Loader size="sm" color="orange" />
       </div>
     );
   }

@@ -144,7 +144,7 @@ export function ProvidersSettings() {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {isLoadingProviderData ? (
-            <Loader size="sm" color="gray" />
+            <Loader size="sm" color="orange" />
           ) : (
             <Select
               data={sttProviderOptions}
@@ -203,7 +203,7 @@ export function ProvidersSettings() {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {isLoadingProviderData ? (
-            <Loader size="sm" color="gray" />
+            <Loader size="sm" color="orange" />
           ) : (
             <Select
               data={llmProviderOptions}

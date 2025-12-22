@@ -119,7 +119,7 @@ Entries can be in various formats - interpret flexibly:
 When you hear terms that sound like entries below, use the correct spelling/form.
 
 ### Entries:
-Tambourine
+Tangerine
 LLM
 ant row pick = Anthropic
 Claude

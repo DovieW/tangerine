@@ -1,5 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Instrument+Serif&family=Sora:wght@400;500;600;700&display=swap");
-
 :root {
 	--bg-primary: #000000;
 	--bg-sidebar: #0a0a0a;
@@ -11,9 +9,11 @@
 	--text-primary: #ffffff;
 	--text-secondary: #a0a0a0;
 	--text-muted: #666666;
-	--accent-primary: #a0a0a0;
-	--accent-glow: rgba(160, 160, 160, 0.15);
-	--accent-hover: #c0c0c0;
+	/* Tangerine brand accent */
+	--accent-primary: #f97316;
+	--accent-glow: rgba(249, 115, 22, 0.18);
+	--accent-hover: #fb923c;
+	--accent-selection: rgba(249, 115, 22, 0.35);
 
 	/*
 		Toggle (Switch) colors
@@ -22,8 +22,9 @@
 	*/
 	--toggle-track-off-bg: rgba(255, 255, 255, 0.14);
 	--toggle-track-off-border: rgba(255, 255, 255, 0.18);
-	--toggle-track-on-bg: rgba(255, 255, 255, 0.38);
-	--toggle-track-on-border: rgba(255, 255, 255, 0.45);
+	/* Slight Tangerine tint when ON (readable, but on-brand) */
+	--toggle-track-on-bg: rgba(249, 115, 22, 0.38);
+	--toggle-track-on-border: rgba(249, 115, 22, 0.52);
 }
 
 /*
@@ -59,14 +60,64 @@ body {
 	overflow: hidden;
 }
 
+::selection {
+	background: var(--accent-selection);
+	color: var(--text-primary);
+}
+
 body {
 	font-family:
-		"DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+		"Sora", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 	background: var(--bg-primary);
 	color: var(--text-primary);
 	line-height: 1.5;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
+}
+
+/*
+	DM Serif Display only ships a regular weight.
+	If we accidentally request 600/700, browsers synthesize a faux-bold that
+	looks crunchy (this was making “Dictate with your voice” look bad).
+	We also add a tiny crisp shadow to help large display text read less “thin”.
+*/
+[data-mantine-color-scheme='dark'] .mantine-Title-root {
+	font-synthesis: none;
+	text-shadow:
+		0.35px 0 0 rgba(255, 255, 255, 0.28),
+		-0.35px 0 0 rgba(255, 255, 255, 0.28);
+}
+
+/* Links: subtle Tangerine accent (avoid looking like a neon sign) */
+a {
+	color: rgba(249, 115, 22, 0.92);
+	text-decoration-color: rgba(249, 115, 22, 0.35);
+	text-underline-offset: 3px;
+}
+
+a:hover {
+	color: var(--accent-hover);
+	text-decoration-color: rgba(249, 115, 22, 0.55);
+}
+
+a:focus-visible {
+	outline: 2px solid var(--accent-glow);
+	outline-offset: 2px;
+	border-radius: 6px;
+}
+
+/* Global focus-visible: keep it consistent and keyboard-friendly */
+[data-mantine-color-scheme='dark'] :where(
+	.mantine-Button-root,
+	.mantine-ActionIcon-root,
+	.mantine-TextInput-input,
+	.mantine-Textarea-input,
+	.mantine-Select-input,
+	.mantine-NumberInput-input,
+	.mantine-PasswordInput-input
+):focus-visible {
+	outline: 2px solid var(--accent-glow);
+	outline-offset: 2px;
 }
 
 #root {
@@ -102,6 +153,7 @@ body {
 	display: flex;
 	align-items: center;
 	justify-content: center;
+	color: var(--accent-primary);
 }
 
 .sidebar-nav {
@@ -120,6 +172,15 @@ body {
 	justify-content: center;
 }
 
+.sidebar-nav-link:hover {
+	background-color: rgba(249, 115, 22, 0.08);
+}
+
+.sidebar-nav-link:focus-visible {
+	outline: 2px solid var(--accent-glow);
+	outline-offset: 2px;
+}
+
 /* Hide the empty body/label section for icon-only nav links */
 .sidebar-nav-link .mantine-NavLink-body {
 	display: none;
@@ -131,7 +192,13 @@ body {
 }
 
 .sidebar-nav-link[data-active] {
-	background-color: var(--bg-elevated);
+	background-color: rgba(249, 115, 22, 0.10);
+	color: var(--accent-primary);
+	box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.sidebar-nav-link[data-active]:hover {
+	background-color: rgba(249, 115, 22, 0.14);
 }
 
 .sidebar-footer {
@@ -174,7 +241,11 @@ body {
 }
 
 .main-content::-webkit-scrollbar-thumb:hover {
-	background: var(--text-muted);
+	background: var(--accent-hover);
+}
+
+.main-content::-webkit-scrollbar-thumb:active {
+	background: var(--accent-primary);
 }
 
 /* Instructions Card */
@@ -199,9 +270,13 @@ body {
 }
 
 .instructions-card-title {
-	font-family: "Sora", sans-serif;
-	font-size: 18px;
+	/* DM Serif Display looks great for big headlines, but gets finicky at ~18px.
+	   Use the UI font here for a cleaner, more "designed" look. */
+	font-family: "Sora", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+	font-size: 17px;
 	font-weight: 600;
+	letter-spacing: -0.01em;
+	line-height: 1.2;
 	color: var(--text-primary);
 	margin-bottom: 12px;
 	display: flex;
@@ -224,7 +299,12 @@ body {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
-	margin-bottom: 16px;
+	margin-bottom: 0;
+}
+
+/* Only add extra spacing when the descriptive paragraph is present. */
+.instructions-methods + .instructions-card-text {
+	margin-top: 16px;
 }
 
 .instruction-method {
@@ -273,6 +353,18 @@ body {
 	color: var(--text-muted);
 	text-transform: uppercase;
 	letter-spacing: 0.08em;
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.section-title::before {
+	content: "";
+	width: 10px;
+	height: 2px;
+	border-radius: 999px;
+	background: var(--accent-primary);
+	opacity: 0.9;
 }
 
 /* History Feed */
@@ -294,9 +386,12 @@ body {
 	border: 1px solid transparent;
 }
 
+
 .history-item:hover {
 	background: var(--bg-card-hover);
-	border-color: var(--border-subtle);
+	border-color: rgba(249, 115, 22, 0.16);
+	/* Subtle, “premium” hover: inset sheen instead of a loud outer glow */
+	box-shadow: inset 0 0 0 1px rgba(249, 115, 22, 0.14);
 }
 
 .history-item:first-child {
@@ -347,8 +442,8 @@ body {
 	width: 48px;
 	height: 48px;
 	margin: 0 auto 16px;
-	color: var(--text-muted);
-	opacity: 0.5;
+	color: rgba(249, 115, 22, 0.65);
+	opacity: 0.35;
 }
 
 .empty-state-title {
@@ -379,6 +474,11 @@ body {
 .settings-tabs .mantine-Tabs-tab:hover {
 	color: var(--text-primary);
 	background: var(--bg-elevated);
+}
+
+.settings-tabs .mantine-Tabs-tab:focus-visible {
+	outline: 2px solid var(--accent-glow);
+	outline-offset: 2px;
 }
 
 .settings-tabs .mantine-Tabs-tab[data-active] {
@@ -417,16 +517,56 @@ body {
 	padding-left: 12px;
 }
 
+/* Combobox/Select option hover: faint Tangerine tint */
+[data-mantine-color-scheme='dark'] .mantine-Combobox-option[data-hovered] {
+	background-color: rgba(249, 115, 22, 0.08);
+}
+
+/* ActionIcon hover cue (kept subtle; only in main content area) */
+[data-mantine-color-scheme='dark'] .main-content :where(button.mantine-ActionIcon-root):hover:not(:disabled) {
+	box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.12);
+}
+
+/* Hotkey “keycaps” polish */
+.hotkey-display .mantine-Kbd-root {
+	background: rgba(255, 255, 255, 0.04);
+	border: 1px solid var(--border-default);
+	color: var(--text-primary);
+}
+
+.hotkey-display.capturing .mantine-Kbd-root {
+	border-color: rgba(249, 115, 22, 0.35);
+	box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.10);
+}
+
+/* Logs: subtle in-progress stripe */
+[data-mantine-color-scheme='dark'] .mantine-Accordion-item[data-status='in_progress'] {
+	box-shadow: inset 3px 0 0 rgba(249, 115, 22, 0.75);
+}
+
+
 .settings-section {
 	margin-bottom: 32px;
 }
 
 .settings-section-title {
-	font-family: "Sora", sans-serif;
+	font-family: "DM Serif Display", serif;
 	font-size: 14px;
 	font-weight: 600;
 	color: var(--text-primary);
 	margin-bottom: 16px;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.settings-section-title::before {
+	content: "";
+	width: 10px;
+	height: 2px;
+	border-radius: 999px;
+	background: var(--accent-primary);
+	opacity: 0.9;
 }
 
 .settings-card {
@@ -523,6 +663,7 @@ body {
 
 .device-selector .mantine-Select-input:focus {
 	border-color: var(--accent-primary);
+	box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.12);
 }
 
 .device-selector .mantine-Select-dropdown {
@@ -540,7 +681,65 @@ body {
 }
 
 .device-selector .mantine-Select-option[data-hovered] {
-	background-color: var(--bg-elevated);
+	background-color: rgba(249, 115, 22, 0.08);
+}
+
+/* Sliders: orange bar + thumb accents */
+[data-mantine-color-scheme='dark'] .mantine-Slider-bar {
+	background: var(--accent-primary);
+}
+
+[data-mantine-color-scheme='dark'] .mantine-Slider-thumb {
+	border-color: rgba(249, 115, 22, 0.65);
+	background: var(--bg-elevated);
+	box-shadow:
+		0 0 0 2px rgba(0, 0, 0, 0.55),
+		0 0 0 4px rgba(249, 115, 22, 0.16);
+}
+
+/* Checkboxes + Radios: orange when checked */
+[data-mantine-color-scheme='dark'] .mantine-Checkbox-input:checked {
+	background-color: var(--accent-primary);
+	border-color: var(--accent-primary);
+}
+
+[data-mantine-color-scheme='dark'] .mantine-Checkbox-input:checked + .mantine-Checkbox-icon {
+	color: #000;
+}
+
+[data-mantine-color-scheme='dark'] .mantine-Radio-radio:checked {
+	background-color: var(--accent-primary);
+	border-color: var(--accent-primary);
+}
+
+/* Toasts / Notifications: left accent bar (keeps severity colors intact) */
+[data-mantine-color-scheme='dark'] .mantine-Notification-root {
+	position: relative;
+	overflow: hidden;
+}
+
+[data-mantine-color-scheme='dark'] .mantine-Notification-root::before {
+	content: "";
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 3px;
+	background: var(--accent-primary);
+	opacity: 0.85;
+}
+
+/* Respect explicit notification colors when present */
+[data-mantine-color-scheme='dark'] .mantine-Notification-root[data-color='red']::before {
+	background: rgba(239, 68, 68, 1);
+}
+
+[data-mantine-color-scheme='dark'] .mantine-Notification-root[data-color='yellow']::before {
+	background: rgba(234, 179, 8, 1);
+}
+
+[data-mantine-color-scheme='dark'] .mantine-Notification-root[data-color='green']::before {
+	background: rgba(34, 197, 94, 1);
 }
 
 /* Animations */

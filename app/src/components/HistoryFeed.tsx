@@ -421,7 +421,7 @@ export function HistoryFeed() {
           <Popover.Target>
             <Indicator
               size={8}
-              color="blue"
+              color="orange"
               offset={2}
               disabled={!hasActiveFilters}
               processing={hasActiveFilters}
@@ -429,7 +429,7 @@ export function HistoryFeed() {
               <ActionIcon
                 variant={hasActiveFilters ? "light" : "subtle"}
                 size="sm"
-                color={hasActiveFilters ? "blue" : "gray"}
+                color={hasActiveFilters ? "orange" : "gray"}
                 onClick={filtersHandlers.toggle}
                 title="Filter options"
                 aria-label="Filter options"
@@ -509,7 +509,7 @@ export function HistoryFeed() {
                     STT Models
                   </Text>
                   {selectedSttModelKeys.length > 0 && (
-                    <Badge size="xs" variant="filled" color="blue" circle>
+                    <Badge size="xs" variant="filled" color="orange" circle>
                       {selectedSttModelKeys.length}
                     </Badge>
                   )}
@@ -599,7 +599,7 @@ export function HistoryFeed() {
                     LLM Models
                   </Text>
                   {selectedLlmModelKeys.length > 0 && (
-                    <Badge size="xs" variant="filled" color="blue" circle>
+                    <Badge size="xs" variant="filled" color="orange" circle>
                       {selectedLlmModelKeys.length}
                     </Badge>
                   )}
@@ -769,7 +769,7 @@ export function HistoryFeed() {
                   <div className="history-text">
                     {(entry.status ?? "success") === "in_progress" ? (
                       <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
-                        <Loader size="xs" color="gray" />
+                        <Loader size="xs" color="orange" />
                         <Text size="sm" c="dimmed" style={{ minWidth: 0 }}>
                           Transcribing…
                         </Text>
@@ -853,7 +853,7 @@ export function HistoryFeed() {
                         notifications.show({
                           title: "Retrying",
                           message: "Re-running transcription…",
-                          color: "blue",
+                          color: "orange",
                         });
                         retryMutation.mutate(entry.id, {
                           onSuccess: () => {

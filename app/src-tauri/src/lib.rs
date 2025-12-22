@@ -1231,7 +1231,7 @@ pub fn run() {
                 "overlay",
                 tauri::WebviewUrl::App("overlay.html".into()),
             )
-            .title("Voice Overlay")
+            .title("Tangerine Overlay")
             .inner_size(48.0, 48.0)
             .decorations(false)
             .transparent(true)
@@ -1346,14 +1346,15 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
 
-    // Load the template icon for macOS menu bar
-    // The @2x version is automatically used for retina displays
-    let icon_bytes = include_bytes!("../icons/tray-iconTemplate@2x.png");
+    // Use the same tray icon everywhere (full-color, brand-consistent).
+    // NOTE: Some platforms (notably macOS) have UI conventions around template icons,
+    // but we intentionally keep it consistent with the rest of the app branding.
+    let icon_bytes = include_bytes!("../icons/32x32.png");
     let icon = tauri::image::Image::from_bytes(icon_bytes)?;
 
     let _tray = TrayIconBuilder::new()
         .icon(icon)
-        .icon_as_template(true)
+        .icon_as_template(false)
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {

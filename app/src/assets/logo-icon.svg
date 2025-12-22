@@ -3,17 +3,17 @@
 	xmlns="http://www.w3.org/2000/svg"
 	viewBox="0 0 64 64"
 	role="img"
-	aria-label="Tangerine logo"
+	aria-label="Tangerine app icon"
 >
 	<!--
-		Tangerine mark: clearly reads as a citrus fruit (segments + stem).
-		Uses ONLY `currentColor` so the whole logo can be rendered entirely orange
-		by setting CSS `color`.
+		NOTE: This file is intended for native app icon generation.
+		Unlike `logo.svg` (which uses `currentColor` for UI theming), this one
+		uses explicit fills so CLI rasterization doesn't default to black.
 	-->
-	<g fill="currentColor">
+	<g fill="#f97316">
 		<!-- Fruit body -->
 		<circle cx="32" cy="36" r="19" opacity="0.95" />
-		<!-- Slight rim for depth (still orange; just lower opacity) -->
+		<!-- Slight rim for depth -->
 		<circle cx="32" cy="36" r="19" opacity="0.18" />
 		<!-- Navel / center dimple -->
 		<circle cx="32" cy="38" r="3.2" opacity="0.38" />
@@ -29,10 +29,10 @@
 		/>
 	</g>
 
-	<!-- Citrus segments (stroke only; still orange via currentColor) -->
+	<!-- Citrus segments (stroke only; still orange) -->
 	<g
 		fill="none"
-		stroke="currentColor"
+		stroke="#f97316"
 		stroke-width="2"
 		stroke-linecap="round"
 		opacity="0.34"

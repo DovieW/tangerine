@@ -87,7 +87,7 @@ function getStatusBadge(status: RequestStatus) {
     case "in_progress":
       return (
         <Badge
-          color="blue"
+          color="orange"
           leftSection={<Loader size={12} className="animate-spin" />}
         >
           In Progress
@@ -205,7 +205,7 @@ function RequestLogItem({
       : null;
 
   return (
-    <Accordion.Item value={log.id}>
+    <Accordion.Item value={log.id} data-status={log.status}>
       <Accordion.Control>
         <Group justify="space-between" wrap="nowrap" pr="md">
           <Group gap="sm" wrap="nowrap">

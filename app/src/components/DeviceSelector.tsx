@@ -107,7 +107,7 @@ export function DeviceSelector() {
           disabled={disabled}
           rightSection={
             isLoading || settingsLoading ? (
-              <Loader size={14} color="gray" />
+              <Loader size={14} color="orange" />
             ) : undefined
           }
           rightSectionPointerEvents="none"

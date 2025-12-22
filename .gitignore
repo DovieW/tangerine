@@ -10,6 +10,11 @@ venv/
 # Node
 node_modules/
 
+# Accidental root-level package manager artifacts.
+# The actual frontend project lives under `app/`.
+/package.json
+/pnpm-lock.yaml
+
 # Build outputs
 release/
 dist/

@@ -193,7 +193,7 @@ export function ProfileConfigModal({
       ),
       confirmLabel: "Disable overrides",
       cancelLabel: "Cancel",
-      confirmColor: "gray",
+      confirmColor: "orange",
       onConfirm: () => {
         saveProfileMetadata({
           // Prompts
@@ -469,7 +469,7 @@ export function ProfileConfigModal({
 
         {updateRewriteProgramPromptProfiles.isPending ? (
           <Group justify="center" mt="md">
-            <Loader size="sm" color="gray" />
+            <Loader size="sm" color="orange" />
           </Group>
         ) : null}
       </Modal>
@@ -485,7 +485,7 @@ export function ProfileConfigModal({
       >
         {isLoadingWindows ? (
           <Group justify="center" p="md">
-            <Loader size="sm" color="gray" />
+            <Loader size="sm" color="orange" />
           </Group>
         ) : (
           <Select
@@ -517,7 +517,7 @@ export function ProfileConfigModal({
             {confirmDialog?.cancelLabel ?? "Cancel"}
           </Button>
           <Button
-            color={confirmDialog?.confirmColor ?? "gray"}
+            color={confirmDialog?.confirmColor ?? "orange"}
             onClick={() => {
               const confirm = confirmDialog?.onConfirm;
               setConfirmDialog(null);
