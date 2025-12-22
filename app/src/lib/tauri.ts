@@ -470,9 +470,10 @@ export const tauriAPI = {
       ),
       stt_timeout_seconds:
         (await store.get<number | null>("stt_timeout_seconds")) ?? null,
-      overlay_mode: (await store.get<OverlayMode>("overlay_mode")) ?? "always",
+      overlay_mode:
+        (await store.get<OverlayMode>("overlay_mode")) ?? "recording_only",
       widget_position:
-        (await store.get<WidgetPosition>("widget_position")) ?? "bottom-right",
+        (await store.get<WidgetPosition>("widget_position")) ?? "bottom-center",
       output_mode: normalizeOutputMode(await store.get("output_mode")),
 
       quiet_audio_gate_enabled:

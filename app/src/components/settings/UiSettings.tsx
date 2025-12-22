@@ -138,7 +138,8 @@ export function UiSettings({
   const playingAudioHandlingInheriting =
     isProfileScope && isInheriting(profile?.playing_audio_handling);
 
-  const globalOverlayMode: OverlayMode = settings?.overlay_mode ?? "always";
+  const globalOverlayMode: OverlayMode =
+    settings?.overlay_mode ?? "recording_only";
   const overlayMode = isProfileScope
     ? getProfileValue(profile?.overlay_mode, globalOverlayMode)
     : globalOverlayMode;
@@ -146,7 +147,7 @@ export function UiSettings({
     isProfileScope && isInheriting(profile?.overlay_mode);
 
   const globalWidgetPosition: WidgetPosition =
-    settings?.widget_position ?? "bottom-right";
+    settings?.widget_position ?? "bottom-center";
   const widgetPosition = isProfileScope
     ? getProfileValue(profile?.widget_position, globalWidgetPosition)
     : globalWidgetPosition;

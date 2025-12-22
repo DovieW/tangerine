@@ -12,6 +12,88 @@ fn get_setting_from_store<T: serde::de::DeserializeOwned>(app: &AppHandle, key: 
         .unwrap_or(default)
 }
 
+fn set_widget_position_impl(app: &AppHandle, position: &str) -> Result<(), String> {
+    let Some(window) = app.get_webview_window("overlay") else {
+        return Err("Overlay window not found".to_string());
+    };
+
+    let monitor = window
+        .current_monitor()
+        .map_err(|e| e.to_string())?
+        .ok_or("No monitor found")?;
+
+    let screen_size = monitor.size();
+    let scale = monitor.scale_factor();
+    let screen_width = screen_size.width as f64 / scale;
+    let screen_height = screen_size.height as f64 / scale;
+
+    // Get current window size
+    let window_size = window.outer_size().map_err(|e| e.to_string())?;
+    let window_width = window_size.width as f64 / scale;
+    let window_height = window_size.height as f64 / scale;
+
+    // Calculate margins (pixels from edge)
+    let margin = 50.0;
+
+    let (x, y) = match position {
+        "top-left" => (margin, margin),
+        "top-center" => ((screen_width - window_width) / 2.0, margin),
+        "top-right" => (screen_width - window_width - margin, margin),
+        "center" => (
+            (screen_width - window_width) / 2.0,
+            (screen_height - window_height) / 2.0,
+        ),
+        "bottom-left" => (margin, screen_height - window_height - margin),
+        "bottom-center" => (
+            (screen_width - window_width) / 2.0,
+            screen_height - window_height - margin,
+        ),
+        "bottom-right" => (
+            screen_width - window_width - margin,
+            screen_height - window_height - margin,
+        ),
+        _ => return Err(format!("Invalid widget position: {}", position)),
+    };
+
+    window
+        .set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }))
+        .map_err(|e| e.to_string())?;
+
+    log::info!("Widget position set to {} at ({}, {})", position, x, y);
+    Ok(())
+}
+
+/// Best-effort: snap the overlay window back to the saved preset position.
+///
+/// Intended for cases where the overlay is not always visible (recording-only/never) and
+/// the user may have dragged it away since the last time it was shown.
+#[cfg(desktop)]
+pub fn snap_overlay_to_saved_position(app: &AppHandle) -> Result<(), String> {
+    let position: String =
+        get_setting_from_store(app, "widget_position", "bottom-center".to_string());
+    set_widget_position_impl(app, position.as_str())
+}
+
+/// Show the overlay window and, if the current mode is not "always", reset the window
+/// back to the saved preset position.
+#[cfg(desktop)]
+pub fn show_overlay_with_reset_if_not_always(app: &AppHandle) -> Result<(), String> {
+    let overlay_mode: String =
+        get_setting_from_store(app, "overlay_mode", "recording_only".to_string());
+
+    if overlay_mode != "always" {
+        if let Err(e) = snap_overlay_to_saved_position(app) {
+            log::warn!("Failed to snap overlay position on show: {}", e);
+        }
+    }
+
+    if let Some(window) = app.get_webview_window("overlay") {
+        window.show().map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn resize_overlay(app: AppHandle, width: f64, height: f64) -> Result<(), String> {
     // Enforce minimum dimensions to prevent invisible window
@@ -102,10 +184,18 @@ pub async fn resize_overlay(app: AppHandle, width: f64, height: f64) -> Result<(
 
 #[tauri::command]
 pub async fn show_overlay(app: AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("overlay") {
-        window.show().map_err(|e| e.to_string())?;
+    #[cfg(desktop)]
+    {
+        return show_overlay_with_reset_if_not_always(&app);
     }
-    Ok(())
+
+    #[cfg(not(desktop))]
+    {
+        if let Some(window) = app.get_webview_window("overlay") {
+            window.show().map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
 }
 
 #[tauri::command]
@@ -133,7 +223,11 @@ pub async fn set_overlay_mode(app: AppHandle, mode: String) -> Result<(), String
                 let app_clone = app.clone();
                 tauri::async_runtime::spawn(async move {
                     tokio::time::sleep(std::time::Duration::from_millis(220)).await;
-                    let current_mode: String = get_setting_from_store(&app_clone, "overlay_mode", "always".to_string());
+                    let current_mode: String = get_setting_from_store(
+                        &app_clone,
+                        "overlay_mode",
+                        "recording_only".to_string(),
+                    );
                     if current_mode == "never" {
                         let _ = window_clone.hide();
                     }
@@ -146,7 +240,11 @@ pub async fn set_overlay_mode(app: AppHandle, mode: String) -> Result<(), String
                 let app_clone = app.clone();
                 tauri::async_runtime::spawn(async move {
                     tokio::time::sleep(std::time::Duration::from_millis(220)).await;
-                    let current_mode: String = get_setting_from_store(&app_clone, "overlay_mode", "always".to_string());
+                    let current_mode: String = get_setting_from_store(
+                        &app_clone,
+                        "overlay_mode",
+                        "recording_only".to_string(),
+                    );
                     if current_mode == "recording_only" {
                         let _ = window_clone.hide();
                     }
@@ -163,52 +261,5 @@ pub async fn set_overlay_mode(app: AppHandle, mode: String) -> Result<(), String
 /// Set overlay widget position on screen
 #[tauri::command]
 pub async fn set_widget_position(app: AppHandle, position: String) -> Result<(), String> {
-    let Some(window) = app.get_webview_window("overlay") else {
-        return Err("Overlay window not found".to_string());
-    };
-
-    let monitor = window
-        .current_monitor()
-        .map_err(|e| e.to_string())?
-        .ok_or("No monitor found")?;
-
-    let screen_size = monitor.size();
-    let scale = monitor.scale_factor();
-    let screen_width = screen_size.width as f64 / scale;
-    let screen_height = screen_size.height as f64 / scale;
-
-    // Get current window size
-    let window_size = window.outer_size().map_err(|e| e.to_string())?;
-    let window_width = window_size.width as f64 / scale;
-    let window_height = window_size.height as f64 / scale;
-
-    // Calculate margins (pixels from edge)
-    let margin = 50.0;
-
-    let (x, y) = match position.as_str() {
-        "top-left" => (margin, margin),
-        "top-center" => ((screen_width - window_width) / 2.0, margin),
-        "top-right" => (screen_width - window_width - margin, margin),
-        "center" => (
-            (screen_width - window_width) / 2.0,
-            (screen_height - window_height) / 2.0,
-        ),
-        "bottom-left" => (margin, screen_height - window_height - margin),
-        "bottom-center" => (
-            (screen_width - window_width) / 2.0,
-            screen_height - window_height - margin,
-        ),
-        "bottom-right" => (
-            screen_width - window_width - margin,
-            screen_height - window_height - margin,
-        ),
-        _ => return Err(format!("Invalid widget position: {}", position)),
-    };
-
-    window
-        .set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }))
-        .map_err(|e| e.to_string())?;
-
-    log::info!("Widget position set to {} at ({}, {})", position, x, y);
-    Ok(())
+    set_widget_position_impl(&app, position.as_str())
 }

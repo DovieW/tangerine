@@ -388,11 +388,10 @@ fn start_recording(
     state.is_recording.store(true, Ordering::SeqCst);
 
     // Show overlay if in "recording_only" mode
-    let overlay_mode: String = get_setting_from_store(app, "overlay_mode", "always".to_string());
+    let overlay_mode: String =
+        get_setting_from_store(app, "overlay_mode", "recording_only".to_string());
     if overlay_mode == "recording_only" {
-        if let Some(window) = app.get_webview_window("overlay") {
-            let _ = window.show();
-        }
+        let _ = commands::overlay::show_overlay_with_reset_if_not_always(app);
     }
 
     // Play sound BEFORE muting so it's audible
@@ -478,7 +477,8 @@ fn stop_recording(
     }
 
     // Get overlay mode for hiding after transcription
-    let overlay_mode: String = get_setting_from_store(app, "overlay_mode", "always".to_string());
+    let overlay_mode: String =
+        get_setting_from_store(app, "overlay_mode", "recording_only".to_string());
 
     // Get output mode for how to output text
     let output_mode_str: String = get_setting_from_store(app, "output_mode", "paste".to_string());
@@ -643,7 +643,11 @@ fn stop_recording(
                             let app_check = app_clone.clone();
                             tauri::async_runtime::spawn(async move {
                                 tokio::time::sleep(std::time::Duration::from_millis(220)).await;
-                                let current_mode: String = get_setting_from_store(&app_check, "overlay_mode", "always".to_string());
+                                let current_mode: String = get_setting_from_store(
+                                    &app_check,
+                                    "overlay_mode",
+                                    "recording_only".to_string(),
+                                );
                                 if current_mode == "recording_only" {
                                     let _ = window_clone.hide();
                                 }
@@ -713,9 +717,8 @@ fn stop_recording(
                     }
 
                     // Force-show overlay for retry UI regardless of overlay_mode.
-                    if let Some(window) = app_clone.get_webview_window("overlay") {
-                        let _ = window.show();
-                    }
+                    // If the user is not in always-visible mode, also snap back to the saved preset.
+                    let _ = commands::overlay::show_overlay_with_reset_if_not_always(&app_clone);
 
                 }
             }
@@ -868,7 +871,8 @@ pub(crate) fn cancel_pipeline_session(app: &AppHandle, source: &str) {
     }
 
     // Hide overlay if in recording-only mode.
-    let overlay_mode: String = get_setting_from_store(app, "overlay_mode", "always".to_string());
+    let overlay_mode: String =
+        get_setting_from_store(app, "overlay_mode", "recording_only".to_string());
     if overlay_mode == "recording_only" {
         let _ = app.emit("overlay-hide-requested", ());
 
@@ -877,8 +881,11 @@ pub(crate) fn cancel_pipeline_session(app: &AppHandle, source: &str) {
             let app_check = app.clone();
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_millis(220)).await;
-                let current_mode: String =
-                    get_setting_from_store(&app_check, "overlay_mode", "always".to_string());
+                let current_mode: String = get_setting_from_store(
+                    &app_check,
+                    "overlay_mode",
+                    "recording_only".to_string(),
+                );
                 if current_mode == "recording_only" {
                     let _ = window_clone.hide();
                 }
@@ -1257,7 +1264,11 @@ pub fn run() {
                 let window_height = 56.0;
                 let margin = 50.0;
 
-                let widget_position: String = get_setting_from_store(app.handle(), "widget_position", "bottom-right".to_string());
+                let widget_position: String = get_setting_from_store(
+                    app.handle(),
+                    "widget_position",
+                    "bottom-center".to_string(),
+                );
 
                 let (x, y) = match widget_position.as_str() {
                     "top-left" => (margin, margin),
@@ -1284,7 +1295,11 @@ pub fn run() {
             // Set initial overlay visibility based on saved settings
             #[cfg(desktop)]
             {
-                let overlay_mode: String = get_setting_from_store(app.handle(), "overlay_mode", "always".to_string());
+                let overlay_mode: String = get_setting_from_store(
+                    app.handle(),
+                    "overlay_mode",
+                    "recording_only".to_string(),
+                );
                 match overlay_mode.as_str() {
                     "never" | "recording_only" => {
                         let _ = overlay.hide();
