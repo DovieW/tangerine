@@ -306,21 +306,27 @@ function RequestLogItem({ log }: { log: RequestLog }) {
             </Paper>
           )}
 
-          {/* Timing info */}
-          {(log.stt_duration_ms || log.llm_duration_ms) && (
-            <Group gap="xs" wrap="wrap">
-              {log.stt_duration_ms && (
-                <Badge variant="light" size="sm" color="gray">
-                  STT {formatDuration(log.stt_duration_ms)} · {sttMetaLabel}
-                </Badge>
-              )}
-              {log.llm_duration_ms && (
-                <Badge variant="light" size="sm" color="gray">
-                  LLM {formatDuration(log.llm_duration_ms)} · {llmMetaLabel}
-                </Badge>
-              )}
-            </Group>
-          )}
+          {/* Timing and model info - always show model info even for failed requests */}
+          <Group gap="xs" wrap="wrap">
+            {log.stt_duration_ms ? (
+              <Badge variant="light" size="sm" color="gray">
+                STT {formatDuration(log.stt_duration_ms)} · {sttMetaLabel}
+              </Badge>
+            ) : (
+              <Badge variant="light" size="sm" color="gray">
+                STT · {sttMetaLabel}
+              </Badge>
+            )}
+            {log.llm_duration_ms ? (
+              <Badge variant="light" size="sm" color="gray">
+                LLM {formatDuration(log.llm_duration_ms)} · {llmMetaLabel}
+              </Badge>
+            ) : llmAttempted || log.llm_provider ? (
+              <Badge variant="light" size="sm" color="gray">
+                LLM · {llmMetaLabel}
+              </Badge>
+            ) : null}
+          </Group>
 
           {/* Log entries */}
           {log.entries.length > 0 && (

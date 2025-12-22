@@ -47,7 +47,13 @@ interface ErrorInfo {
  * Parse error message to user-friendly format
  */
 function parseError(error: unknown): ErrorInfo {
-  const errorStr = String(error);
+  // Handle object errors (e.g., CommandError from Tauri with { message, error_type })
+  let errorStr: string;
+  if (error && typeof error === "object" && "message" in error) {
+    errorStr = String((error as { message: unknown }).message);
+  } else {
+    errorStr = String(error);
+  }
 
   // Missing persisted audio (retry can't run)
   if (
