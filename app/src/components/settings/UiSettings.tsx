@@ -1,8 +1,10 @@
 import {
   ActionIcon,
   Button,
+  Checkbox,
   Group,
   Modal,
+  SegmentedControl,
   Select,
   Switch,
   Tooltip,
@@ -241,47 +243,17 @@ export function UiSettings({
     updateOutputHitEnter.mutate(checked);
   };
 
-  const handleOutputPasteToggle = (checked: boolean) => {
-    // Enforce at least one action selected.
-    let nextPaste = checked;
-    let nextClipboard = outputFlags.clipboard;
+  const handleOutputModeChange = (next: string) => {
+    const nextMode = next as OutputMode;
 
-    if (!nextPaste && !nextClipboard) {
-      nextClipboard = true;
-    }
-
-    const nextMode = flagsToOutputMode(nextPaste, nextClipboard);
-
-    // If paste is being disabled, hit-enter becomes invalid; clear it.
-    if (!nextPaste && outputHitEnter) {
+    // If switching to clipboard-only, hit-enter becomes invalid; clear it.
+    if (nextMode === "clipboard" && outputHitEnter) {
       handleOutputHitEnterToggle(false);
     }
 
     // Avoid no-op writes
     if (nextMode === outputMode) return;
-    if (isProfileScope) {
-      updateProfile({ output_mode: nextMode });
-      return;
-    }
-    updateOutputMode.mutate(nextMode);
-  };
 
-  const handleOutputClipboardToggle = (checked: boolean) => {
-    // Enforce at least one action selected.
-    let nextClipboard = checked;
-    let nextPaste = outputFlags.paste;
-
-    if (!nextClipboard && !nextPaste) {
-      nextPaste = true;
-    }
-
-    const nextMode = flagsToOutputMode(nextPaste, nextClipboard);
-
-    if (!nextPaste && outputHitEnter) {
-      handleOutputHitEnterToggle(false);
-    }
-
-    if (nextMode === outputMode) return;
     if (isProfileScope) {
       updateProfile({ output_mode: nextMode });
       return;
@@ -548,7 +520,7 @@ export function UiSettings({
 
       <div className="settings-row">
         <div>
-          <p className="settings-label">Output mode</p>
+          <p className="settings-label">Output</p>
           <p className="settings-description">How to output transcribed text</p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -585,36 +557,42 @@ export function UiSettings({
                 <Info size={14} style={{ opacity: 0.5, flexShrink: 0 }} />
               </Tooltip>
             )}
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <Switch
-              label="Paste"
-              checked={outputFlags.paste}
-              onChange={(event) =>
-                handleOutputPasteToggle(event.currentTarget.checked)
-              }
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "flex-end",
+              gap: 12,
+            }}
+          >
+            <SegmentedControl
+              value={outputMode}
+              onChange={handleOutputModeChange}
               disabled={isLoading}
-              color="gray"
-              size="md"
+              data={[
+                { value: "paste", label: "Paste" },
+                { value: "clipboard", label: "Copy" },
+                { value: "paste_and_clipboard", label: "Both" },
+              ]}
+              size="sm"
+              radius="md"
+              styles={{
+                root: {
+                  backgroundColor: "var(--bg-elevated)",
+                  border: "1px solid var(--border-default)",
+                  minWidth: 260,
+                },
+              }}
             />
-            <Switch
-              label="Clipboard"
-              checked={outputFlags.clipboard}
-              onChange={(event) =>
-                handleOutputClipboardToggle(event.currentTarget.checked)
-              }
-              disabled={isLoading}
-              color="gray"
-              size="md"
-            />
-            <Switch
-              label="Hit Enter"
+            <Checkbox
+              label="Press Enter after paste"
               checked={outputHitEnter}
               onChange={(event) =>
                 handleOutputHitEnterToggle(event.currentTarget.checked)
               }
-              disabled={isLoading || !outputFlags.paste}
+              disabled={isLoading || outputMode === "clipboard"}
               color="gray"
-              size="md"
+              size="sm"
             />
           </div>
         </div>

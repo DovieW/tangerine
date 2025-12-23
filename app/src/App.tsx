@@ -29,54 +29,10 @@ import {
   DEFAULT_TOGGLE_HOTKEY,
 } from "./lib/hotkeyDefaults";
 import { useSettings } from "./lib/queries";
-import { type ConnectionState, type HotkeyConfig, tauriAPI } from "./lib/tauri";
+import { type HotkeyConfig, tauriAPI } from "./lib/tauri";
 import "./styles.css";
 
 type View = "home" | "settings" | "logs";
-
-function ConnectionStatusIndicator() {
-  const [state, setState] = useState<ConnectionState>("idle");
-
-  // Listen for connection state changes from the overlay window
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-
-    const setup = async () => {
-      unlisten = await tauriAPI.onConnectionStateChanged((newState) => {
-        setState(newState);
-      });
-    };
-
-    setup();
-
-    return () => {
-      unlisten?.();
-    };
-  }, []);
-
-  const statusText: string = (() => {
-    switch (state) {
-      case "idle":
-        return "Ready";
-      case "recording":
-        return "Recording";
-      case "processing":
-        return "Processing...";
-      case "connecting":
-        return "Connecting...";
-      case "disconnected":
-        return "Disconnected";
-    }
-  })();
-
-  return (
-    <Tooltip label={statusText} position="right" withArrow>
-      <div className="connection-status">
-        <span className={`connection-status-dot ${state}`} />
-      </div>
-    </Tooltip>
-  );
-}
 
 function Sidebar({
   activeView,
@@ -124,8 +80,14 @@ function Sidebar({
       </nav>
 
       <footer className="sidebar-footer">
-        <ConnectionStatusIndicator />
-        <p className="sidebar-footer-text">v0.1.0</p>
+        <a
+          className="sidebar-footer-link"
+          href="https://github.com/DovieW/tangerine-voice"
+          target="_blank"
+          rel="noreferrer"
+        >
+          v0.1.0
+        </a>
       </footer>
     </aside>
   );

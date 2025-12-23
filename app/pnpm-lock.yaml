@@ -8,33 +8,12 @@ importers:
 
   .:
     dependencies:
-      '@fontsource/dm-serif-display':
-        specifier: ^5.2.8
-        version: 5.2.8
-      '@fontsource/fraunces':
-        specifier: ^5.2.9
-        version: 5.2.9
-      '@fontsource/ibm-plex-sans':
-        specifier: ^5.2.8
-        version: 5.2.8
-      '@fontsource/ibm-plex-serif':
-        specifier: ^5.2.7
-        version: 5.2.7
-      '@fontsource/inter':
-        specifier: ^5.2.8
-        version: 5.2.8
-      '@fontsource/manrope':
-        specifier: ^5.2.8
-        version: 5.2.8
-      '@fontsource/plus-jakarta-sans':
+      '@fontsource/outfit':
         specifier: ^5.2.8
         version: 5.2.8
       '@fontsource/sora':
         specifier: ^5.2.8
         version: 5.2.8
-      '@fontsource/space-grotesk':
-        specifier: ^5.2.10
-        version: 5.2.10
       '@mantine/core':
         specifier: ^8.3.10
         version: 8.3.10(@mantine/hooks@8.3.10(react@19.2.3))(@types/react@19.2.7)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -443,32 +422,11 @@ packages:
   '@floating-ui/utils@0.2.10':
     resolution: {integrity: sha512-aGTxbpbg8/b5JfU1HXSrbH3wXZuLPJcNEcZQFMxLs3oSzgtVu6nFPkbbGGUvBcUjKV2YyB9Wxxabo+HEH9tcRQ==}
 
-  '@fontsource/dm-serif-display@5.2.8':
-    resolution: {integrity: sha512-GYSDSlGU6vyhv9a5MwaiVNf9HCuSVpK8hEFRyG4NNDHCDeHiX7YHDAcWsaoLKKcfXLgWG9YkBkk9T3SxM4rAjQ==}
-
-  '@fontsource/fraunces@5.2.9':
-    resolution: {integrity: sha512-XDzuddBtoC7BZgZdBn6b7hsFZY2+V1hgN7yca5fBTKuHjb/lOd45a0Ji8dTUgFhPoL7RdGupo+bC2BFSt6UH8Q==}
-
-  '@fontsource/ibm-plex-sans@5.2.8':
-    resolution: {integrity: sha512-eztSXjDhPhcpxNIiGTgMebdLP9qS4rWkysuE1V7c+DjOR0qiezaiDaTwQE7bTnG5HxAY/8M43XKDvs3cYq6ZYQ==}
-
-  '@fontsource/ibm-plex-serif@5.2.7':
-    resolution: {integrity: sha512-04owmc2OQQ/DAMjXjEMJc+7V4dBVmR01aIFOg4cuqS8pQ4HbvtlYs/u6+O0vCt21EMx5M/azIbgx43iKyisEOA==}
-
-  '@fontsource/inter@5.2.8':
-    resolution: {integrity: sha512-P6r5WnJoKiNVV+zvW2xM13gNdFhAEpQ9dQJHt3naLvfg+LkF2ldgSLiF4T41lf1SQCM9QmkqPTn4TH568IRagg==}
-
-  '@fontsource/manrope@5.2.8':
-    resolution: {integrity: sha512-gJHJmcuUk7qWcNCfcAri/DJQtXtBYqi9yKratr4jXhSo0I3xUtNNKI+igQIcw5c+m95g0vounk8ZnX/kb8o0TA==}
-
-  '@fontsource/plus-jakarta-sans@5.2.8':
-    resolution: {integrity: sha512-P5qE49fqdeD+7DXH1KBxmMPlB17LTz1zvBhFH0tFzfnYTKVJVyb0pR6plh0ZGXxcB+Oayb54FZZw3V42/DawTw==}
+  '@fontsource/outfit@5.2.8':
+    resolution: {integrity: sha512-rXC6g0MqD7cOBjht0bMqc43qM6lRqDLML9KXsmg9uykz0wLQhy8Z/ajrMG6iyoT3NJR+MYgU+OEHp7uHoTb+Yw==}
 
   '@fontsource/sora@5.2.8':
     resolution: {integrity: sha512-1G6iTXUx8rcCKzi3mjaTQ1DE8PQz0OmW3Qnku+64S+bqRr1o/gGeiw8fxIQhhBU9ZP8ZofIqai7o00DNOPnlDw==}
-
-  '@fontsource/space-grotesk@5.2.10':
-    resolution: {integrity: sha512-XNXEbT74OIITPqw2H6HXwPDp85fy43uxfBwFR5PU+9sLnjuLj12KlhVM9nZVN6q6dlKjkuN8JisW/OBxwxgUew==}
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -2029,23 +1987,9 @@ snapshots:
 
   '@floating-ui/utils@0.2.10': {}
 
-  '@fontsource/dm-serif-display@5.2.8': {}
-
-  '@fontsource/fraunces@5.2.9': {}
-
-  '@fontsource/ibm-plex-sans@5.2.8': {}
-
-  '@fontsource/ibm-plex-serif@5.2.7': {}
-
-  '@fontsource/inter@5.2.8': {}
-
-  '@fontsource/manrope@5.2.8': {}
-
-  '@fontsource/plus-jakarta-sans@5.2.8': {}
+  '@fontsource/outfit@5.2.8': {}
 
   '@fontsource/sora@5.2.8': {}
-
-  '@fontsource/space-grotesk@5.2.10': {}
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:

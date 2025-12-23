@@ -268,7 +268,10 @@ export function ProfileConfigModal({
 
   const openWindowPicker = async () => {
     setWindowPickerOpen(true);
-    setWindowPickerDropdownOpened(true);
+    // Open the dropdown only after the modal finished its enter transition.
+    // Otherwise Mantine positions the dropdown before the Select input is laid out,
+    // which can cause it to render in the wrong place and overlap the whole modal.
+    setWindowPickerDropdownOpened(false);
     setIsLoadingWindows(true);
     try {
       const windows = await tauriAPI.listOpenWindows();
@@ -482,6 +485,10 @@ export function ProfileConfigModal({
         }}
         title="Pick an open program"
         centered
+        transitionProps={{
+          onEntered: () => setWindowPickerDropdownOpened(true),
+          onExited: () => setWindowPickerDropdownOpened(false),
+        }}
       >
         {isLoadingWindows ? (
           <Group justify="center" p="md">

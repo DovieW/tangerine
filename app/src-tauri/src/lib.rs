@@ -515,7 +515,36 @@ fn stop_recording(
         };
 
         tauri::async_runtime::spawn(async move {
-            let _ = app_clone.emit("pipeline-transcription-started", ());
+            // Emit transcription started only once the pipeline actually transitions
+            // into Transcribing (quiet-audio gate skips should fade out without ever
+            // showing "TRANSCRIBING...").
+            {
+                let app_for_evt = app_clone.clone();
+                let pipeline_for_evt = pipeline_clone.clone();
+                tauri::async_runtime::spawn(async move {
+                    let start = std::time::Instant::now();
+                    loop {
+                        match pipeline_for_evt.state() {
+                            pipeline::PipelineState::Transcribing
+                            | pipeline::PipelineState::Rewriting => {
+                                let _ = app_for_evt.emit("pipeline-transcription-started", ());
+                                break;
+                            }
+                            pipeline::PipelineState::Idle | pipeline::PipelineState::Error => {
+                                // Idle can happen immediately due to quiet-audio skip.
+                                break;
+                            }
+                            pipeline::PipelineState::Recording => {}
+                        }
+
+                        if start.elapsed() > std::time::Duration::from_secs(2) {
+                            break;
+                        }
+
+                        tokio::time::sleep(std::time::Duration::from_millis(15)).await;
+                    }
+                });
+            }
 
             // Create an in-progress history entry while we transcribe.
             if let Some(ref req_id) = request_id {

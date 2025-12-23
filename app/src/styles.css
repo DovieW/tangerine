@@ -1,4 +1,10 @@
 :root {
+	/*
+		Heading font (easy to tweak).
+		Try: 'Space Grotesk' | 'Manrope' | 'IBM Plex Sans' | 'Inter'
+	*/
+	--tv-font-heading: 'Outfit';
+
 	--bg-primary: #000000;
 	--bg-sidebar: #0a0a0a;
 	--bg-card: #111111;
@@ -76,10 +82,8 @@ body {
 }
 
 /*
-	DM Serif Display only ships a regular weight.
-	If we accidentally request 600/700, browsers synthesize a faux-bold that
-	looks crunchy (this was making “Dictate with your voice” look bad).
-	We also add a tiny crisp shadow to help large display text read less “thin”.
+	Title text gets a tiny crisp shadow in dark mode for readability.
+	(Headings font is configured in theme.ts.)
 */
 [data-mantine-color-scheme='dark'] .mantine-Title-root {
 	font-synthesis: none;
@@ -202,12 +206,13 @@ a:focus-visible {
 }
 
 .sidebar-footer {
-	padding: 16px 12px;
-	border-top: 1px solid var(--border-subtle);
+	padding: 0 12px 14px;
+	border-top: none;
 	margin-top: auto;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
+	justify-content: flex-end;
 }
 
 .sidebar-footer-text {
@@ -215,6 +220,26 @@ a:focus-visible {
 	color: var(--text-muted);
 	text-transform: uppercase;
 	letter-spacing: 0.05em;
+}
+
+.sidebar-footer-link {
+	display: flex;
+	align-items: center;
+	font-size: 11px;
+	color: var(--text-muted);
+	text-transform: none;
+	letter-spacing: 0.05em;
+	text-decoration: none;
+}
+
+.sidebar-footer-link:hover {
+	text-decoration: underline;
+	cursor: pointer;
+}
+
+.sidebar-footer-link:focus-visible {
+	outline: 2px solid var(--accent-glow);
+	outline-offset: 2px;
 }
 
 /* Main Content */
@@ -272,7 +297,8 @@ a:focus-visible {
 .instructions-card-title {
 	/* DM Serif Display looks great for big headlines, but gets finicky at ~18px.
 	   Use the UI font here for a cleaner, more "designed" look. */
-	font-family: "Sora", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+	font-family: var(--tv-font-heading), "Sora", -apple-system, BlinkMacSystemFont,
+		"Segoe UI", sans-serif;
 	font-size: 17px;
 	font-weight: 600;
 	letter-spacing: -0.01em;
@@ -365,6 +391,11 @@ a:focus-visible {
 	border-radius: 999px;
 	background: var(--accent-primary);
 	opacity: 0.9;
+}
+
+/* Some sections (e.g., History) should not show the orange accent bar */
+.section-title.section-title--no-accent::before {
+	content: none;
 }
 
 /* History Feed */
@@ -550,7 +581,8 @@ a:focus-visible {
 }
 
 .settings-section-title {
-	font-family: "DM Serif Display", serif;
+	font-family: var(--tv-font-heading), "Sora", -apple-system, BlinkMacSystemFont,
+		"Segoe UI", sans-serif;
 	font-size: 14px;
 	font-weight: 600;
 	color: var(--text-primary);
@@ -583,6 +615,20 @@ a:focus-visible {
 	padding: 16px 0;
 	min-height: 72px;
 	border-bottom: 1px solid var(--border-subtle);
+}
+
+/*
+ * Most settings tabs start with a .settings-row, which already has vertical
+ * padding. Combined with the card padding this can look like “extra space” at
+ * the top compared to tabs that start with other components (e.g. Hotkeys).
+ */
+.settings-card > .settings-row:first-child {
+	padding-top: 0;
+}
+
+/* Default <p> margins add unintended vertical spacing inside rows */
+.settings-row p {
+	margin: 0;
 }
 
 /*
@@ -777,35 +823,4 @@ a:focus-visible {
 .animate-in-delay-4 {
 	animation-delay: 0.2s;
 	opacity: 0;
-}
-
-/* Connection Status Indicator */
-.connection-status {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 16px;
-	height: 16px;
-	margin-bottom: 8px;
-	cursor: default;
-}
-
-.connection-status-dot {
-	width: 10px;
-	height: 10px;
-	border-radius: 50%;
-}
-
-.connection-status-dot.idle,
-.connection-status-dot.recording {
-	background-color: #22c55e;
-}
-
-.connection-status-dot.processing,
-.connection-status-dot.connecting {
-	background-color: #f59e0b;
-}
-
-.connection-status-dot.disconnected {
-	background-color: #ef4444;
 }

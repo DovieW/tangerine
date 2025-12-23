@@ -208,10 +208,6 @@ export function ApiKeysSettings({
 
   const content = (
     <>
-      <Text size="sm" c="dimmed" mb="md">
-        Add API keys to enable cloud providers. Keys are stored locally and
-        never sent anywhere except to the provider's API.
-      </Text>
       {API_KEYS.map((config) => (
         <ApiKeyInput key={config.id} config={config} />
       ))}

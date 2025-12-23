@@ -393,18 +393,40 @@ export function PromptSettings({
     { group: "Local", items: llmLocalProviders },
   ];
 
-  const effectiveSttProvider =
+  // Treat providers as "unselected" if they're not currently available in the
+  // dropdown (e.g. on a fresh install before API keys are configured). This
+  // keeps model pickers hidden/disabled until a real provider is selectable.
+  const sttProviderValueSet = new Set(
+    [...sttCloudProviders, ...sttLocalProviders].map((p) => p.value)
+  );
+  const llmProviderValueSet = new Set(
+    [...llmCloudProviders, ...llmLocalProviders].map((p) => p.value)
+  );
+
+  const rawSttProvider =
     activeProfileId === "default"
       ? settings?.stt_provider ?? null
       : localProfileSttProvider ?? settings?.stt_provider ?? null;
+  const effectiveSttProvider =
+    rawSttProvider && sttProviderValueSet.has(rawSttProvider)
+      ? rawSttProvider
+      : null;
+
   const effectiveSttModel =
-    activeProfileId === "default"
+    effectiveSttProvider === null
+      ? null
+      : activeProfileId === "default"
       ? settings?.stt_model ?? null
       : localProfileSttModel ?? settings?.stt_model ?? null;
-  const effectiveLlmProvider =
+
+  const rawLlmProvider =
     activeProfileId === "default"
       ? settings?.llm_provider ?? null
       : localProfileLlmProvider ?? settings?.llm_provider ?? null;
+  const effectiveLlmProvider =
+    rawLlmProvider && llmProviderValueSet.has(rawLlmProvider)
+      ? rawLlmProvider
+      : null;
 
   const isOpenAiStt = effectiveSttProvider === "openai";
   const isGroqStt = effectiveSttProvider === "groq";
@@ -788,7 +810,8 @@ export function PromptSettings({
       </Modal>
 
       <Divider
-        my="md"
+        mt="xs"
+        mb="xs"
         label="Speech-to-text"
         labelPosition="left"
         styles={{
@@ -847,11 +870,7 @@ export function PromptSettings({
           )}
           <Select
             data={sttProviderOptions}
-            value={
-              isDefaultScope
-                ? settings?.stt_provider ?? null
-                : localProfileSttProvider
-            }
+            value={effectiveSttProvider}
             onChange={(value) => {
               if (!value) return;
               if (isDefaultScope) {
@@ -1065,7 +1084,18 @@ export function PromptSettings({
         </div>
       </div>
 
-      <div style={{ marginTop: 16, marginBottom: 16 }}>
+      <Divider
+        mt={0}
+        mb="sm"
+        styles={{
+          root: {
+            borderTopWidth: 1,
+            borderColor: "var(--border-subtle)",
+          },
+        }}
+      />
+
+      <div style={{ marginTop: 0, marginBottom: 16 }}>
         <Accordion variant="separated" radius="md">
           <Accordion.Item value={`${activeProfileId}-stt-prompt`}>
             <Accordion.Control>
@@ -1282,7 +1312,8 @@ export function PromptSettings({
       </div>
 
       <Divider
-        my="md"
+        mt="md"
+        mb="xs"
         label="Language model"
         labelPosition="left"
         styles={{
@@ -1402,11 +1433,7 @@ export function PromptSettings({
           )}
           <Select
             data={llmProviderOptions}
-            value={
-              isDefaultScope
-                ? settings?.llm_provider ?? null
-                : localProfileLlmProvider
-            }
+            value={effectiveLlmProvider}
             onChange={(value) => {
               if (!value) return;
               if (isDefaultScope) {

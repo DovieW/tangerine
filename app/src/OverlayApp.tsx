@@ -16,6 +16,7 @@ import "./app.css";
 type PipelineState =
   | "idle"
   | "recording"
+  | "stopping"
   | "transcribing"
   | "rewriting"
   | "error";
@@ -24,6 +25,8 @@ function isPipelineState(value: string): value is PipelineState {
   return (
     value === "idle" ||
     value === "recording" ||
+    // NOTE: "stopping" is a UI-only state; Rust will never return it.
+    value === "stopping" ||
     value === "transcribing" ||
     value === "rewriting" ||
     value === "error"
@@ -708,7 +711,13 @@ function RecordingControl() {
       try {
         const state = await invoke<string>("pipeline_get_state");
         if (isPipelineState(state)) {
-          setPipelineState(state);
+          // If the user just hit stop, we enter the UI-only "stopping" state.
+          // Don't let polling flip us back to "recording" while the backend is still
+          // finalizing audio capture.
+          setPipelineState((prev) => {
+            if (prev === "stopping" && state === "recording") return prev;
+            return state;
+          });
         } else {
           setPipelineState("idle");
         }
@@ -911,7 +920,9 @@ function RecordingControl() {
     if (pipelineState !== "recording") return;
 
     try {
-      setPipelineState("transcribing");
+      // UI-only intermediate state: avoids flashing "transcribing..." for the
+      // quiet-audio gate (hallucination protection) path.
+      setPipelineState("stopping");
 
       const transcript = await invoke<string>("pipeline_stop_and_transcribe");
 
@@ -985,7 +996,9 @@ function RecordingControl() {
         setPipelineState("recording");
       });
       unlistenStop = await tauriAPI.onStopRecording(() => {
-        setPipelineState("transcribing");
+        // Hotkey stop means "we're stopping"; the backend will emit
+        // "pipeline-transcription-started" only if transcription actually begins.
+        setPipelineState("stopping");
       });
     };
 
@@ -1129,7 +1142,9 @@ function RecordingControl() {
   );
 
   const isLoading =
-    pipelineState === "transcribing" || pipelineState === "rewriting";
+    pipelineState === "stopping" ||
+    pipelineState === "transcribing" ||
+    pipelineState === "rewriting";
   const isRecording = pipelineState === "recording";
   const isError = pipelineState === "error";
   const centerPhaseText =
@@ -1193,12 +1208,27 @@ function RecordingControl() {
             }
           >
             <div className="overlay-icon">{renderIcon()}</div>
-            <div className="overlay-center">
+            <div
+              className={`overlay-center${
+                isError && lastError ? " overlay-center--error" : ""
+              }`}
+            >
               {isError && lastError ? (
                 <div
                   style={{ display: "flex", flexDirection: "column", gap: 4 }}
                 >
-                  <div className="overlay-error-text" title={lastError.message}>
+                  <div
+                    className="overlay-error-text"
+                    title={lastError.message}
+                    tabIndex={0}
+                    onMouseEnter={(e) => {
+                      // Ensure we show the beginning of the message (not a scrolled midpoint).
+                      e.currentTarget.scrollLeft = 0;
+                    }}
+                    onFocus={(e) => {
+                      e.currentTarget.scrollLeft = 0;
+                    }}
+                  >
                     {lastError.message}
                   </div>
                 </div>

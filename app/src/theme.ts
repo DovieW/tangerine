@@ -11,8 +11,11 @@ export const darkTheme = createTheme({
   primaryColor: "orange",
   fontFamily: "'Sora', -apple-system, BlinkMacSystemFont, sans-serif",
   headings: {
-    fontFamily: "'DM Serif Display', serif",
-    fontWeight: "400",
+    // Use a slightly more expressive sans-serif for headers.
+    // Outfit is included via @fontsource/outfit.
+    fontFamily:
+      "'Outfit', 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    fontWeight: "600",
   },
   colors: {
     dark: [

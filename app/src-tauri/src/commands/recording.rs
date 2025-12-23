@@ -8,7 +8,7 @@ use crate::pipeline::{LlmOutcome, PipelineConfig, PipelineError, PipelineState, 
 use crate::recordings::RecordingStore;
 use crate::request_log::RequestLogStore;
 use crate::history::{HistoryStorage, RequestModelInfo};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 /// Tauri-compatible error type for commands
@@ -176,8 +176,40 @@ pub async fn pipeline_stop_and_transcribe(
         }
     }
 
-    // Emit transcription started event
-    let _ = app.emit("pipeline-transcription-started", ());
+    // Emit transcription started *only if* the pipeline actually enters the
+    // Transcribing state.
+    //
+    // This prevents the overlay from briefly showing "TRANSCRIBING..." when the
+    // quiet-audio gate (hallucination protection) decides to skip STT.
+    {
+        let app_clone = app.clone();
+        let pipeline_clone = pipeline.inner().clone();
+        tauri::async_runtime::spawn(async move {
+            let start = Instant::now();
+            loop {
+                match pipeline_clone.state() {
+                    PipelineState::Transcribing | PipelineState::Rewriting => {
+                        let _ = app_clone.emit("pipeline-transcription-started", ());
+                        break;
+                    }
+                    PipelineState::Idle | PipelineState::Error => {
+                        // Quiet-audio skip resets to Idle; errors also shouldn't show
+                        // a "transcribing" phase.
+                        break;
+                    }
+                    PipelineState::Recording => {
+                        // Still finalizing stop.
+                    }
+                }
+
+                if start.elapsed() > Duration::from_secs(2) {
+                    break;
+                }
+
+                tokio::time::sleep(Duration::from_millis(15)).await;
+            }
+        });
+    }
 
     // Log transcription start
     if let Some(log_store) = app.try_state::<RequestLogStore>() {
@@ -609,8 +641,32 @@ pub async fn pipeline_dictate(
         });
     }
 
-    // Stop and transcribe
-    let _ = app.emit("pipeline-transcription-started", ());
+    // Emit transcription started *only if* the pipeline actually enters the
+    // Transcribing state (avoid flashing "TRANSCRIBING..." on quiet-audio skips).
+    {
+        let app_clone = app.clone();
+        let pipeline_clone = pipeline.inner().clone();
+        tauri::async_runtime::spawn(async move {
+            let start = Instant::now();
+            loop {
+                match pipeline_clone.state() {
+                    PipelineState::Transcribing | PipelineState::Rewriting => {
+                        let _ = app_clone.emit("pipeline-transcription-started", ());
+                        break;
+                    }
+                    PipelineState::Idle | PipelineState::Error => {
+                        break;
+                    }
+                    PipelineState::Recording => {}
+                }
+
+                if start.elapsed() > Duration::from_secs(2) {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(15)).await;
+            }
+        });
+    }
 
     let result = match pipeline.stop_and_transcribe_detailed().await {
         Ok(r) => r,

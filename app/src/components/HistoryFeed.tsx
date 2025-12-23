@@ -312,7 +312,9 @@ export function HistoryFeed() {
     return (
       <div className="animate-in animate-in-delay-2">
         <div className="section-header">
-          <span className="section-title">History</span>
+          <span className="section-title section-title--no-accent">
+            History
+          </span>
         </div>
         <div className="empty-state">
           <p className="empty-state-text">Loading history...</p>
@@ -325,7 +327,9 @@ export function HistoryFeed() {
     return (
       <div className="animate-in animate-in-delay-2">
         <div className="section-header">
-          <span className="section-title">History</span>
+          <span className="section-title section-title--no-accent">
+            History
+          </span>
         </div>
         <div className="empty-state">
           <p className="empty-state-text" style={{ color: "#ef4444" }}>
@@ -340,7 +344,9 @@ export function HistoryFeed() {
     return (
       <div className="animate-in animate-in-delay-2">
         <div className="section-header">
-          <span className="section-title">History</span>
+          <span className="section-title section-title--no-accent">
+            History
+          </span>
         </div>
         <div className="empty-state">
           <MessageSquare className="empty-state-icon" />
@@ -356,10 +362,13 @@ export function HistoryFeed() {
 
   const groupedHistory = groupHistoryByDate(pageHistory);
 
+  const totalHistoryCount = history?.length ?? 0;
+  const isFiltering = filterText.trim().length > 0 || hasActiveFilters;
+
   return (
     <div className="animate-in animate-in-delay-2">
       <div className="section-header">
-        <span className="section-title">History</span>
+        <span className="section-title section-title--no-accent">History</span>
         <Button
           variant="subtle"
           size="compact-sm"
@@ -748,8 +757,27 @@ export function HistoryFeed() {
       {filteredHistory.length === 0 ? (
         <div className="empty-state">
           <MessageSquare className="empty-state-icon" />
-          <h4 className="empty-state-title">No matches</h4>
-          <p className="empty-state-text">Try a different filter.</p>
+          {totalHistoryCount === 0 ? (
+            <>
+              <h4 className="empty-state-title">No dictation history yet</h4>
+              <p className="empty-state-text">
+                Your transcribed text will appear here after you use voice
+                dictation.
+              </p>
+            </>
+          ) : isFiltering ? (
+            <>
+              <h4 className="empty-state-title">No matches</h4>
+              <p className="empty-state-text">Try a different filter.</p>
+            </>
+          ) : (
+            <>
+              <h4 className="empty-state-title">Nothing to show</h4>
+              <p className="empty-state-text">
+                Start your first recording to see it here.
+              </p>
+            </>
+          )}
         </div>
       ) : (
         groupedHistory.map((group) => (

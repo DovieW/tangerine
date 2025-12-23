@@ -80,7 +80,7 @@ body {
 	padding: 10px 12px;
 	border-radius: 16px;
 	border: 1px solid rgba(255, 255, 255, 0.08);
-	background: rgba(0, 0, 0, 0.88);
+	background: rgba(10, 10, 10, 0.97);
 	color: #fff;
 	cursor: pointer;
 	user-select: none;
@@ -177,6 +177,11 @@ body {
 	/* expand/collapse animation disabled (see .overlay-button note) */
 }
 
+/* When showing an error message, anchor content to the left so truncation shows the start. */
+.overlay-center--error {
+	justify-content: flex-start;
+}
+
 .overlay-meta {
 	flex: 0 0 auto;
 	display: flex;
@@ -215,10 +220,26 @@ body {
 .overlay-error-text {
 	font-size: 12px;
 	color: rgba(255, 255, 255, 0.92);
+	text-align: left;
+	direction: ltr;
+	unicode-bidi: plaintext;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
+	width: 100%;
 	max-width: 180px;
+	scrollbar-width: none; /* Firefox */
+}
+
+.overlay-error-text::-webkit-scrollbar {
+	display: none;
+}
+
+/* Allow reading the full error without tooltips (tooltips are hidden in overlay). */
+.overlay-error-text:hover,
+.overlay-error-text:focus {
+	overflow-x: auto;
+	text-overflow: clip;
 }
 
 .overlay-phase-text {
