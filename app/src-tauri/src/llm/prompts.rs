@@ -136,7 +136,7 @@ impl Default for PromptSections {
     fn default() -> Self {
         Self {
             main_custom: None,
-            advanced_enabled: true,
+            advanced_enabled: false,
             advanced_custom: None,
             dictionary_enabled: false,
             dictionary_custom: None,

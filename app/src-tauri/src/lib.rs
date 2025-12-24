@@ -108,9 +108,9 @@ fn ensure_default_settings(app: &AppHandle) -> Result<(), Box<dyn std::error::Er
     // Keep these defaults aligned with pipeline defaults / expected backend behavior.
     set_if_missing("stt_provider", json!("groq"));
     set_if_missing("stt_transcription_prompt", json!(null));
-    set_if_missing("stt_timeout_seconds", json!(60.0));
-    set_if_missing("overlay_mode", json!("always"));
-    set_if_missing("widget_position", json!("bottom-right"));
+    set_if_missing("stt_timeout_seconds", json!(10.0));
+    set_if_missing("overlay_mode", json!("recording_only"));
+    set_if_missing("widget_position", json!("bottom-center"));
     set_if_missing("output_mode", json!("paste"));
     set_if_missing("output_hit_enter", json!(false));
     set_if_missing("playing_audio_handling", json!("mute"));
@@ -1634,15 +1634,15 @@ fn initialize_pipeline_from_settings(app: &AppHandle) -> pipeline::SharedPipelin
         get_setting_from_store(app, "stt_transcription_prompt", None);
 
     // Read STT timeout from store (seconds)
-    let stt_timeout_seconds_raw: f64 = get_setting_from_store(app, "stt_timeout_seconds", 60.0);
+    let stt_timeout_seconds_raw: f64 = get_setting_from_store(app, "stt_timeout_seconds", 10.0);
     let stt_timeout_seconds: f64 = if stt_timeout_seconds_raw.is_finite() && stt_timeout_seconds_raw > 0.0 {
         stt_timeout_seconds_raw
     } else {
         log::warn!(
-            "Invalid stt_timeout_seconds value in store ({}); falling back to 60s",
+            "Invalid stt_timeout_seconds value in store ({}); falling back to 10s",
             stt_timeout_seconds_raw
         );
-        60.0
+        10.0
     };
 
     // Read all available STT API keys (for per-profile provider overrides at runtime)

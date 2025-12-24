@@ -47,13 +47,13 @@ const INHERIT_TOOLTIP = "Inheriting from Default profile";
 
 const DEFAULT_SECTIONS: CleanupPromptSections = {
   main: { enabled: true, content: null },
-  advanced: { enabled: true, content: null },
+  advanced: { enabled: false, content: null },
   dictionary: { enabled: false, content: null },
 };
 
 // NOTE: This timeout is used by the Rust pipeline as a transcription request timeout.
 // Keep this default aligned with backend fallbacks so "unset" settings don't lie.
-const DEFAULT_STT_TIMEOUT = 60;
+const DEFAULT_STT_TIMEOUT = 10;
 
 type SectionKey = "main" | "advanced" | "dictionary";
 

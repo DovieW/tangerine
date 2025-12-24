@@ -86,7 +86,7 @@ fn seconds_to_duration_or(seconds: f64, fallback: Duration) -> Duration {
 }
 
 /// Default timeout for STT transcription requests
-const DEFAULT_TRANSCRIPTION_TIMEOUT: Duration = Duration::from_secs(60);
+const DEFAULT_TRANSCRIPTION_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Maximum WAV file size in bytes (50MB) to prevent memory issues
 const MAX_WAV_SIZE_BYTES: usize = 50 * 1024 * 1024;

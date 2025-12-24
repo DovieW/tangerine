@@ -14,7 +14,7 @@ import { tauriAPI } from "../../lib/tauri";
 
 // NOTE: This timeout is used by the Rust pipeline as a transcription request timeout.
 // Keep this default aligned with backend fallbacks so "unset" settings don't lie.
-const DEFAULT_STT_TIMEOUT = 60;
+const DEFAULT_STT_TIMEOUT = 10;
 
 export function ProvidersSettings() {
 	const { data: settings, isLoading: isLoadingSettings } = useSettings();
