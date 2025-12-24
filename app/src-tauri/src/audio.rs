@@ -62,7 +62,8 @@ pub fn estimated_duration(sound_type: SoundType, cue: AudioCue) -> Duration {
 
         // Synth cues: keep in sync with durations in `build_synth_cue_source`.
         AudioCue::Tangerine => match sound_type {
-            SoundType::RecordingStart => Duration::from_millis(255),
+            // Start cue: two-note up-chime (shorter than the previous 3-note arpeggio).
+            SoundType::RecordingStart => Duration::from_millis(170),
             SoundType::RecordingStop => Duration::from_millis(195),
         },
         AudioCue::Maraca => match sound_type {
@@ -269,15 +270,12 @@ fn build_synth_cue_source(sound_type: SoundType, cue: AudioCue) -> (SamplesBuffe
                     let d1 = Duration::from_millis(70);
                     let gap = Duration::from_millis(20);
                     let d2 = Duration::from_millis(80);
-                    let d3 = Duration::from_millis(65);
 
                     push_chime(&mut samples, 523.25, d1, 0.20); // C5
                     push_silence(&mut samples, gap);
                     push_chime(&mut samples, 659.25, d2, 0.19); // E5
-                    push_silence(&mut samples, gap);
-                    push_chime(&mut samples, 783.99, d3, 0.17); // G5
 
-                    duration = d1 + gap + d2 + gap + d3;
+                    duration = d1 + gap + d2;
                 }
                 SoundType::RecordingStop => {
                     let d1 = Duration::from_millis(80);
