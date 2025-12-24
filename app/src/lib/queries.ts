@@ -337,6 +337,39 @@ export function useUpdateMaxSavedRecordings() {
   });
 }
 
+export function useUpdateTranscriptionRetentionDays() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (days: number) =>
+      tauriAPI.updateTranscriptionRetentionDays(days),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
+    },
+  });
+}
+
+export function useUpdateTranscriptionRetention() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { unit: "days" | "hours"; value: number }) =>
+      tauriAPI.updateTranscriptionRetention(params),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
+    },
+  });
+}
+
+export function useUpdateTranscriptionRetentionDeleteRecordings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (enabled: boolean) =>
+      tauriAPI.updateTranscriptionRetentionDeleteRecordings(enabled),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
+    },
+  });
+}
+
 export function useRecordingsStats() {
   return useQuery({
     queryKey: ["recordingsStats"],

@@ -202,6 +202,39 @@ impl HistoryStorage {
         self.save()
     }
 
+    /// Delete entries older than `cutoff` (strictly earlier than cutoff).
+    ///
+    /// Returns the list of removed entry IDs (useful for cleaning up recordings).
+    pub fn prune_older_than(&self, cutoff: DateTime<Utc>) -> Result<Vec<String>, String> {
+        let mut removed: Vec<String> = Vec::new();
+        let mut changed = false;
+
+        {
+            let mut data = self
+                .data
+                .write()
+                .map_err(|e| format!("Failed to write history: {}", e))?;
+
+            let before = data.entries.len();
+            data.entries.retain(|entry| {
+                if entry.timestamp < cutoff {
+                    removed.push(entry.id.clone());
+                    false
+                } else {
+                    true
+                }
+            });
+
+            changed = data.entries.len() != before;
+        }
+
+        if changed {
+            self.save()?;
+        }
+
+        Ok(removed)
+    }
+
     /// Mark an existing request entry as successful and set the final text.
     pub fn complete_request_success(&self, request_id: &str, text: String) -> Result<(), String> {
         {

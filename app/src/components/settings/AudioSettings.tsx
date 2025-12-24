@@ -1,7 +1,9 @@
 import {
   ActionIcon,
+  Checkbox,
   Group,
   NumberInput,
+  SegmentedControl,
   Slider,
   Switch,
   Tooltip,
@@ -18,10 +20,13 @@ import {
   useUpdateQuietAudioMinDurationSecs,
   useUpdateQuietAudioPeakDbfsThreshold,
   useUpdateQuietAudioRmsDbfsThreshold,
+  useUpdateTranscriptionRetention,
+  useUpdateTranscriptionRetentionDeleteRecordings,
 } from "../../lib/queries";
 import {
   recordingsAPI,
   type RewriteProgramPromptProfile,
+  type TranscriptionRetentionUnit,
 } from "../../lib/tauri";
 import { DeviceSelector } from "../DeviceSelector";
 
@@ -36,6 +41,9 @@ export function AudioSettings({
   const { data: settings } = useSettings();
 
   const updateMaxSavedRecordings = useUpdateMaxSavedRecordings();
+  const updateTranscriptionRetention = useUpdateTranscriptionRetention();
+  const updateTranscriptionRetentionDeleteRecordings =
+    useUpdateTranscriptionRetentionDeleteRecordings();
   const recordingsStats = useRecordingsStats();
 
   const updateQuietAudioGateEnabled = useUpdateQuietAudioGateEnabled();
@@ -63,6 +71,32 @@ export function AudioSettings({
     settings?.quiet_audio_peak_dbfs_threshold ?? -50;
 
   const maxSavedRecordings = settings?.max_saved_recordings ?? 1000;
+  const transcriptionRetentionUnitFromSettings: TranscriptionRetentionUnit =
+    settings?.transcription_retention_unit ?? "days";
+  const transcriptionRetentionValueFromSettings =
+    settings?.transcription_retention_value ?? 0;
+  const transcriptionRetentionDeleteRecordings =
+    settings?.transcription_retention_delete_recordings ?? false;
+
+  const [transcriptionRetentionDraft, setTranscriptionRetentionDraft] =
+    useState<{
+      unit: TranscriptionRetentionUnit;
+      value: number;
+    } | null>(null);
+
+  useEffect(() => {
+    // Drop any draft once settings refresh from disk so we stay source-of-truth.
+    setTranscriptionRetentionDraft(null);
+  }, [
+    transcriptionRetentionUnitFromSettings,
+    transcriptionRetentionValueFromSettings,
+  ]);
+
+  const transcriptionRetentionUnit =
+    transcriptionRetentionDraft?.unit ?? transcriptionRetentionUnitFromSettings;
+  const transcriptionRetentionValue =
+    transcriptionRetentionDraft?.value ??
+    transcriptionRetentionValueFromSettings;
 
   const handleOpenRecordingsFolder = async () => {
     try {
@@ -111,7 +145,18 @@ export function AudioSettings({
       <div className="settings-row">
         <div>
           <p className="settings-label">Max recordings to save</p>
-          <p className="settings-description">
+          <p
+            className="settings-description settings-description--single-line"
+            title={`Keep at most this many recordings on disk.${
+              recordingsStats.isLoading
+                ? " (Calculating storage…)"
+                : recordingsSummary === null
+                ? ""
+                : ` (Currently saved ${
+                    recordingsSummary.count
+                  } recordings at ${recordingsSummary.gb.toFixed(2)} GB)`
+            }`}
+          >
             Keep at most this many recordings on disk.
             {recordingsStats.isLoading
               ? " (Calculating storage…)"
@@ -165,6 +210,109 @@ export function AudioSettings({
                 width: 140,
               },
             }}
+          />
+        </Group>
+      </div>
+
+      <div className="settings-row">
+        <div>
+          <p className="settings-label">Transcription retention</p>
+          <p
+            className="settings-description settings-description--single-line settings-description--tiny"
+            title="Delete transcriptions older than this. Set to 0 to keep forever."
+          >
+            Delete transcriptions older than this (0 = forever).
+          </p>
+        </div>
+        <Group gap={10} align="center" wrap="wrap">
+          <NumberInput
+            value={transcriptionRetentionValue}
+            onChange={(value) => {
+              const next = typeof value === "number" ? value : 0;
+              setTranscriptionRetentionDraft({
+                unit: transcriptionRetentionUnit,
+                value: next,
+              });
+              updateTranscriptionRetention.mutate({
+                unit: transcriptionRetentionUnit,
+                value: next,
+              });
+            }}
+            min={0}
+            max={transcriptionRetentionUnit === "hours" ? 36500 * 24 : 36500}
+            step={transcriptionRetentionUnit === "hours" ? 0.5 : 1}
+            decimalScale={transcriptionRetentionUnit === "hours" ? 2 : 0}
+            clampBehavior="strict"
+            disabled={isProfileScope}
+            styles={{
+              input: {
+                backgroundColor: "var(--bg-elevated)",
+                borderColor: "var(--border-default)",
+                color: "var(--text-primary)",
+                width: 140,
+              },
+            }}
+          />
+
+          <SegmentedControl
+            value={transcriptionRetentionUnit}
+            onChange={(next) => {
+              const nextUnit =
+                next === "hours" ? ("hours" as const) : ("days" as const);
+
+              const current =
+                typeof transcriptionRetentionValue === "number"
+                  ? transcriptionRetentionValue
+                  : 0;
+
+              // Preserve the underlying duration when switching units.
+              const nextValue =
+                current === 0
+                  ? 0
+                  : transcriptionRetentionUnit === "days" &&
+                    nextUnit === "hours"
+                  ? current * 24
+                  : transcriptionRetentionUnit === "hours" &&
+                    nextUnit === "days"
+                  ? Math.round(current / 24)
+                  : current;
+
+              setTranscriptionRetentionDraft({
+                unit: nextUnit,
+                value: nextValue,
+              });
+
+              updateTranscriptionRetention.mutate({
+                unit: nextUnit,
+                value: nextValue,
+              });
+            }}
+            data={[
+              { label: "Days", value: "days" },
+              { label: "Hours", value: "hours" },
+            ]}
+            disabled={isProfileScope}
+            styles={{
+              root: {
+                backgroundColor: "var(--bg-elevated)",
+                border: "1px solid var(--border-default)",
+              },
+              label: {
+                color: "var(--text-primary)",
+              },
+            }}
+          />
+
+          <Checkbox
+            checked={transcriptionRetentionDeleteRecordings}
+            onChange={(event) =>
+              updateTranscriptionRetentionDeleteRecordings.mutate(
+                event.currentTarget.checked
+              )
+            }
+            disabled={isProfileScope || transcriptionRetentionValue === 0}
+            label="Also delete recordings"
+            color="gray"
           />
         </Group>
       </div>

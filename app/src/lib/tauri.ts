@@ -108,6 +108,8 @@ export type WidgetPosition =
 
 export type OutputMode = "paste" | "paste_and_clipboard" | "clipboard";
 
+export type TranscriptionRetentionUnit = "days" | "hours";
+
 function normalizeOutputMode(value: unknown): OutputMode {
   if (
     value === "paste" ||
@@ -161,6 +163,13 @@ export interface AppSettings {
 
   // How many recordings/history entries to retain
   max_saved_recordings: number;
+
+  // Time-based retention for transcriptions/history.
+  // 0 means keep forever.
+  transcription_retention_unit: TranscriptionRetentionUnit;
+  transcription_retention_value: number;
+  // If enabled, deleting old transcriptions also deletes their recordings (best-effort).
+  transcription_retention_delete_recordings: boolean;
 }
 
 function normalizePlayingAudioHandling(value: unknown): PlayingAudioHandling {
@@ -209,6 +218,37 @@ function normalizeMaxSavedRecordings(value: unknown): number {
   const rounded = Math.round(value);
   // 1..100000 (defensive)
   return Math.min(100000, Math.max(1, rounded));
+}
+
+function normalizeTranscriptionRetentionUnit(
+  value: unknown
+): TranscriptionRetentionUnit {
+  if (value === "days" || value === "hours") return value;
+  return "days";
+}
+
+function normalizeTranscriptionRetentionValue(
+  value: unknown,
+  unit: TranscriptionRetentionUnit
+): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  const clamped = Math.max(0, value);
+
+  if (unit === "days") {
+    const rounded = Math.round(clamped);
+    // 0..36500 days (~100 years) defensive cap
+    return Math.min(36500, Math.max(0, rounded));
+  }
+
+  // hours: allow decimals (e.g. 0.5). Cap at ~100 years worth of hours.
+  const maxHours = 36500 * 24;
+  return Math.min(maxHours, clamped);
+}
+
+function normalizeTranscriptionRetentionDeleteRecordings(
+  value: unknown
+): boolean {
+  return typeof value === "boolean" ? value : false;
 }
 
 // ============================================================================
@@ -551,6 +591,35 @@ export const tauriAPI = {
       max_saved_recordings: normalizeMaxSavedRecordings(
         await store.get("max_saved_recordings")
       ),
+
+      // Time retention: new (unit+value), with legacy fallback to transcription_retention_days.
+      ...await(async () => {
+        const rawUnit = await store.get("transcription_retention_unit");
+        const rawValue = await store.get("transcription_retention_value");
+
+        // Legacy installs only have days.
+        if (rawUnit == null && rawValue == null) {
+          const legacyDays = normalizeTranscriptionRetentionValue(
+            await store.get("transcription_retention_days"),
+            "days"
+          );
+          return {
+            transcription_retention_unit: "days" as const,
+            transcription_retention_value: legacyDays,
+          };
+        }
+
+        const unit = normalizeTranscriptionRetentionUnit(rawUnit);
+        const value = normalizeTranscriptionRetentionValue(rawValue, unit);
+        return {
+          transcription_retention_unit: unit,
+          transcription_retention_value: value,
+        };
+      })(),
+      transcription_retention_delete_recordings:
+        normalizeTranscriptionRetentionDeleteRecordings(
+          await store.get("transcription_retention_delete_recordings")
+        ),
     };
   },
 
@@ -767,6 +836,49 @@ export const tauriAPI = {
   async updateMaxSavedRecordings(max: number): Promise<void> {
     const store = await getStore();
     await store.set("max_saved_recordings", normalizeMaxSavedRecordings(max));
+    await store.save();
+  },
+
+  async updateTranscriptionRetentionDays(days: number): Promise<void> {
+    const store = await getStore();
+    const normalized = normalizeTranscriptionRetentionValue(days, "days");
+    // Legacy key (kept for backward compatibility)
+    await store.set("transcription_retention_days", normalized);
+    // New keys
+    await store.set("transcription_retention_unit", "days");
+    await store.set("transcription_retention_value", normalized);
+    await store.save();
+  },
+
+  async updateTranscriptionRetention(params: {
+    unit: TranscriptionRetentionUnit;
+    value: number;
+  }): Promise<void> {
+    const store = await getStore();
+    const unit = normalizeTranscriptionRetentionUnit(params.unit);
+    const value = normalizeTranscriptionRetentionValue(params.value, unit);
+
+    await store.set("transcription_retention_unit", unit);
+    await store.set("transcription_retention_value", value);
+
+    // Best-effort: keep the legacy days key in sync when unit is days.
+    // (If unit is hours, we leave the legacy key untouched to avoid silently
+    // changing semantics for older builds.)
+    if (unit === "days") {
+      await store.set("transcription_retention_days", value);
+    }
+
+    await store.save();
+  },
+
+  async updateTranscriptionRetentionDeleteRecordings(
+    enabled: boolean
+  ): Promise<void> {
+    const store = await getStore();
+    await store.set(
+      "transcription_retention_delete_recordings",
+      normalizeTranscriptionRetentionDeleteRecordings(enabled)
+    );
     await store.save();
   },
 

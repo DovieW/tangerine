@@ -106,6 +106,33 @@ impl RecordingStore {
         fs::read(&path).map_err(|e| format!("Failed to read recording {}: {}", path.display(), e))
     }
 
+    /// Delete a saved WAV file if it exists.
+    ///
+    /// Returns `true` if a file was deleted.
+    pub fn delete_wav_if_exists(&self, id: &str) -> Result<bool, String> {
+        if !Self::is_safe_request_id(id) {
+            return Err("Invalid request id".to_string());
+        }
+
+        let path = self.path_for_id(id);
+        if !path.exists() {
+            // Keep existence cache best-effort in sync.
+            if let Ok(mut known) = self.known_existing.write() {
+                known.remove(id);
+            }
+            return Ok(false);
+        }
+
+        fs::remove_file(&path)
+            .map_err(|e| format!("Failed to delete recording {}: {}", path.display(), e))?;
+
+        if let Ok(mut known) = self.known_existing.write() {
+            known.remove(id);
+        }
+
+        Ok(true)
+    }
+
     /// Returns total size (in bytes) of all files in the recordings directory.
     ///
     /// Best-effort: skips individual files it cannot stat.

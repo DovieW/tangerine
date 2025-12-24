@@ -656,6 +656,19 @@ a:focus-visible {
 	margin-top: 2px;
 }
 
+/* Utility: keep a description on a single line (avoid awkward wraps) */
+.settings-description--single-line {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* Utility: smaller helper text for very obvious controls */
+.settings-description--tiny {
+	font-size: 11px;
+	opacity: 0.85;
+}
+
 /* Hotkey Display */
 .hotkey-display {
 	display: flex;

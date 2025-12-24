@@ -112,6 +112,14 @@ fn ensure_default_settings(app: &AppHandle) -> Result<(), Box<dyn std::error::Er
     // How many recordings/history items to retain (impacts disk usage).
     // Keep this aligned with the UI default.
     set_if_missing("max_saved_recordings", json!(1000));
+    // Time-based retention for history/transcriptions. 0 = keep forever.
+    set_if_missing("transcription_retention_days", json!(0));
+    // New retention keys (unit+value) used by newer UI.
+    // Keep legacy days key as well for backward compatibility.
+    set_if_missing("transcription_retention_unit", json!("days"));
+    set_if_missing("transcription_retention_value", json!(0.0));
+    // When deleting old transcriptions, optionally also delete their .wav recordings.
+    set_if_missing("transcription_retention_delete_recordings", json!(false));
     set_if_missing("overlay_mode", json!("recording_only"));
     set_if_missing("widget_position", json!("bottom-center"));
     set_if_missing("output_mode", json!("paste"));
@@ -756,6 +764,9 @@ fn stop_recording(
                                 let _ = app_clone.emit("history-changed", ());
                             }
                         }
+
+                        // Time-based retention (best-effort). This path is used by global shortcuts.
+                        commands::recording::apply_transcription_retention(&app_clone);
                     } else {
                         // Emit empty transcript event so UI can update appropriately
                         let _ = app_clone.emit("pipeline-transcript-ready", "");
@@ -768,6 +779,9 @@ fn stop_recording(
                                 let _ = app_clone.emit("history-changed", ());
                             }
                         }
+
+                        // Time-based retention (best-effort). This path is used by global shortcuts.
+                        commands::recording::apply_transcription_retention(&app_clone);
                     }
 
                     // Hide overlay after transcription completes if in "recording_only" mode.
@@ -863,6 +877,9 @@ fn stop_recording(
                             let _ = app_clone.emit("history-changed", ());
                         }
                     }
+
+                    // Time-based retention (best-effort). Still apply even on failures.
+                    commands::recording::apply_transcription_retention(&app_clone);
 
                     // Force-show overlay for retry UI regardless of overlay_mode.
                     // If the user is not in always-visible mode, also snap back to the saved preset.

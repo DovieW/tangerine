@@ -8,6 +8,7 @@ use crate::pipeline::{LlmOutcome, PipelineConfig, PipelineError, PipelineState, 
 use crate::recordings::{RecordingStore, RecordingsStats};
 use crate::request_log::RequestLogStore;
 use crate::history::{HistoryStorage, RequestModelInfo};
+use chrono::{Duration as ChronoDuration, Utc};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -32,6 +33,160 @@ fn get_max_saved_recordings(app: &AppHandle) -> usize {
     {
         1000
     }
+}
+
+fn get_transcription_retention_days(app: &AppHandle) -> u64 {
+    #[cfg(desktop)]
+    {
+        let raw = app
+            .store("settings.json")
+            .ok()
+            .and_then(|store| store.get("transcription_retention_days"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        // 0..36500 days (~100 years) to avoid nonsense values.
+        return raw.min(36_500);
+    }
+
+    #[cfg(not(desktop))]
+    {
+        0
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum TranscriptionRetentionUnit {
+    Days,
+    Hours,
+}
+
+fn get_transcription_retention_duration(app: &AppHandle) -> Option<ChronoDuration> {
+    #[cfg(desktop)]
+    {
+        let store = app.store("settings.json").ok();
+
+        // Ensure we see the latest persisted settings (the store is cached across calls).
+        // Best-effort: if load fails, continue with whatever is already in memory.
+        if let Some(s) = store.as_ref() {
+            let _ = s.reload();
+        }
+
+        // New keys: unit + value
+        let unit = store
+            .as_ref()
+            .and_then(|s| s.get("transcription_retention_unit"))
+            .and_then(|v| {
+                v.as_str().map(|s| match s {
+                    "hours" => TranscriptionRetentionUnit::Hours,
+                    _ => TranscriptionRetentionUnit::Days,
+                })
+            });
+
+        let value = store
+            .as_ref()
+            .and_then(|s| s.get("transcription_retention_value"))
+            .and_then(|v| {
+                v.as_f64()
+                    .or_else(|| v.as_u64().map(|x| x as f64))
+                    .or_else(|| v.as_str().and_then(|s| s.parse::<f64>().ok()))
+            });
+
+        if let (Some(unit), Some(value)) = (unit, value) {
+            // 0 means keep forever.
+            if !(value > 0.0) {
+                return None;
+            }
+
+            match unit {
+                TranscriptionRetentionUnit::Days => {
+                    // Defensive cap: 0..36500 days (~100 years)
+                    let days = value.round().clamp(0.0, 36_500.0) as i64;
+                    if days <= 0 {
+                        None
+                    } else {
+                        Some(ChronoDuration::days(days))
+                    }
+                }
+                TranscriptionRetentionUnit::Hours => {
+                    // Allow fractional hours (e.g. 0.5)
+                    // Defensive cap: ~100 years in hours
+                    let hours = value.clamp(0.0, 36_500.0 * 24.0);
+                    if !(hours > 0.0) {
+                        None
+                    } else {
+                        let millis = (hours * 3_600_000.0).round() as i64;
+                        Some(ChronoDuration::milliseconds(millis))
+                    }
+                }
+            }
+        } else {
+            // Legacy key: days
+            let days = get_transcription_retention_days(app);
+            if days == 0 {
+                None
+            } else {
+                Some(ChronoDuration::days(days as i64))
+            }
+        }
+    }
+
+    #[cfg(not(desktop))]
+    {
+        None
+    }
+}
+
+fn get_transcription_retention_delete_recordings(app: &AppHandle) -> bool {
+    #[cfg(desktop)]
+    {
+        return app
+            .store("settings.json")
+            .ok()
+            .and_then(|store| store.get("transcription_retention_delete_recordings"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+    }
+
+    #[cfg(not(desktop))]
+    {
+        false
+    }
+}
+
+pub(crate) fn apply_transcription_retention(app: &AppHandle) {
+    let Some(retention) = get_transcription_retention_duration(app) else {
+        return;
+    };
+
+    let cutoff = Utc::now() - retention;
+    let delete_recordings = get_transcription_retention_delete_recordings(app);
+
+    let Some(history) = app.try_state::<HistoryStorage>() else {
+        return;
+    };
+
+    let removed = match history.prune_older_than(cutoff) {
+        Ok(ids) => ids,
+        Err(e) => {
+            log::warn!("Failed to prune history by time retention: {}", e);
+            return;
+        }
+    };
+
+    if removed.is_empty() {
+        return;
+    }
+
+    if delete_recordings {
+        if let Some(store) = app.try_state::<RecordingStore>() {
+            for id in removed.iter() {
+                // Best-effort: ignore errors and non-existent files.
+                let _ = store.delete_wav_if_exists(id);
+            }
+        }
+    }
+
+    let _ = app.emit("history-changed", ());
 }
 
 /// Tauri-compatible error type for commands
@@ -317,6 +472,9 @@ pub async fn pipeline_stop_and_transcribe(
                 }
             }
 
+            // Time-based retention (best-effort). Runs only after a transcription attempt.
+            apply_transcription_retention(&app);
+
             // Persist audio for retry (best-effort)
             if let (Some(req_id), Some(store)) = (
                 active_request_id.as_deref(),
@@ -421,6 +579,9 @@ pub async fn pipeline_stop_and_transcribe(
             let _ = app.emit("history-changed", ());
         }
     }
+
+    // Time-based retention (best-effort). Runs only after a transcription attempt.
+    apply_transcription_retention(&app);
 
     // Emit transcript ready event
     let _ = app.emit("pipeline-transcript-ready", &final_text);
