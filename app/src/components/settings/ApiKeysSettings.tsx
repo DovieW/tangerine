@@ -1,7 +1,6 @@
-import { ActionIcon, PasswordInput, Text, Tooltip } from "@mantine/core";
+import { Button, PasswordInput, Tooltip } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Pencil, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { configAPI, tauriAPI } from "../../lib/tauri";
 
 const GLOBAL_ONLY_TOOLTIP =
@@ -46,14 +45,30 @@ export const API_KEY_STORE_KEYS = API_KEYS.map((k) => k.storeKey);
 function ApiKeyInput({ config }: { config: ApiKeyConfig }) {
   const queryClient = useQueryClient();
   const [value, setValue] = useState("");
-  const [isEditing, setIsEditing] = useState(false);
   const [isPrefilling, setIsPrefilling] = useState(false);
+  const hasHydratedRef = useRef(false);
 
   // Query to check if key is set
   const { data: hasKey } = useQuery({
     queryKey: ["apiKey", config.storeKey],
     queryFn: () => tauriAPI.hasApiKey(config.storeKey),
   });
+
+  const { data: savedKeyValue } = useQuery({
+    queryKey: ["apiKeyValue", config.storeKey],
+    queryFn: () => tauriAPI.getApiKey(config.storeKey),
+    staleTime: 0,
+  });
+
+  useEffect(() => {
+    if (hasHydratedRef.current) return;
+    if (!savedKeyValue) return;
+
+    // Mirror the setup guide: if a key exists, show it in the PasswordInput
+    // (hidden by default), so Show/Hide reveals something useful.
+    setValue(savedKeyValue);
+    hasHydratedRef.current = true;
+  }, [savedKeyValue]);
 
   // Mutation to save key
   const saveKey = useMutation({
@@ -62,107 +77,44 @@ function ApiKeyInput({ config }: { config: ApiKeyConfig }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["apiKey", config.storeKey] });
+      queryClient.invalidateQueries({
+        queryKey: ["apiKeyValue", config.storeKey],
+      });
       queryClient.invalidateQueries({ queryKey: ["availableProviders"] });
       // Sync pipeline config when API keys change
       configAPI.syncPipelineConfig();
-      setValue("");
-      setIsEditing(false);
-    },
-  });
-
-  // Mutation to clear key
-  const clearKey = useMutation({
-    mutationFn: async () => {
-      await tauriAPI.clearApiKey(config.storeKey);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["apiKey", config.storeKey] });
-      queryClient.invalidateQueries({ queryKey: ["availableProviders"] });
-      configAPI.syncPipelineConfig();
-      setValue("");
-      setIsEditing(false);
+      // Keep the saved value in the field so the button disables when unchanged.
+      setValue((prev) => prev.trim());
+      hasHydratedRef.current = true;
     },
   });
 
   const handleSave = () => {
-    if (value.trim()) {
-      saveKey.mutate(value.trim());
-    }
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    saveKey.mutate(trimmed);
   };
 
-  const handleCancel = () => {
-    setValue("");
-    setIsEditing(false);
-  };
-
-  const handleClear = () => {
-    clearKey.mutate();
-  };
-
-  const startEditing = async () => {
-    setIsEditing(true);
-
-    // If a key exists, prefill the input so the built-in Show/Hide toggle
-    // actually reveals something (instead of toggling an empty field).
-    if (!hasKey) return;
-
-    setIsPrefilling(true);
-    try {
-      const existingKey = await tauriAPI.getApiKey(config.storeKey);
-      setValue(existingKey ?? "");
-    } catch {
-      // If reading fails for any reason, fall back to empty and let the user re-enter.
-      setValue("");
-    } finally {
-      setIsPrefilling(false);
-    }
-  };
-
-  if (!isEditing && hasKey) {
-    return (
-      <div className="settings-row">
-        <div>
-          <p className="settings-label">{config.label}</p>
-          <p className="settings-description">API key configured</p>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <Text size="sm" c="teal">
-            ✓ Set
-          </Text>
-          <Tooltip label="Change API key">
-            <ActionIcon variant="subtle" color="gray" onClick={startEditing}>
-              <Pencil size={16} />
-            </ActionIcon>
-          </Tooltip>
-          <Tooltip label="Remove API key">
-            <ActionIcon
-              variant="subtle"
-              color="red"
-              onClick={handleClear}
-              loading={clearKey.isPending}
-            >
-              <X size={16} />
-            </ActionIcon>
-          </Tooltip>
-        </div>
-      </div>
-    );
-  }
+  const trimmedValue = value.trim();
+  const trimmedSaved = (savedKeyValue ?? "").trim();
+  const isUnchanged =
+    trimmedSaved.length > 0 && trimmedValue.length > 0 && trimmedValue === trimmedSaved;
 
   return (
     <div className="settings-row">
       <div>
         <p className="settings-label">{config.label}</p>
         <p className="settings-description">
-          {hasKey ? "Update your API key" : "Enter your API key"}
+          {hasKey ? "API key configured" : "Enter your API key"}
         </p>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "stretch", gap: 8 }}>
         <PasswordInput
           value={value}
           onChange={(e) => setValue(e.currentTarget.value)}
           placeholder={config.placeholder}
-          disabled={isPrefilling || saveKey.isPending || clearKey.isPending}
+          size="sm"
+          disabled={isPrefilling || saveKey.isPending}
           styles={{
             input: {
               backgroundColor: "var(--bg-elevated)",
@@ -173,27 +125,24 @@ function ApiKeyInput({ config }: { config: ApiKeyConfig }) {
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter") handleSave();
-            if (e.key === "Escape") handleCancel();
           }}
         />
-        <Tooltip label="Save">
-          <ActionIcon
-            variant="filled"
-            color="teal"
+        <Tooltip label={hasKey ? "Set API key" : "Set API key"}>
+          <Button
+            color="orange"
+            size="sm"
             onClick={handleSave}
             loading={saveKey.isPending}
-            disabled={!value.trim()}
+            disabled={!trimmedValue || saveKey.isPending || isUnchanged}
+            styles={{
+              root: {
+                height: 36,
+              },
+            }}
           >
-            <Check size={16} />
-          </ActionIcon>
+            Set
+          </Button>
         </Tooltip>
-        {(isEditing || hasKey) && (
-          <Tooltip label="Cancel">
-            <ActionIcon variant="subtle" color="gray" onClick={handleCancel}>
-              <X size={16} />
-            </ActionIcon>
-          </Tooltip>
-        )}
       </div>
     </div>
   );
