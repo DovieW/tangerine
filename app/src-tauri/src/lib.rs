@@ -28,7 +28,7 @@ mod tests;
 use audio_mute::AudioMuteManager;
 use history::{HistoryStorage, RequestModelInfo};
 use recordings::RecordingStore;
-use request_log::RequestLogStore;
+use request_log::{RequestLogStore, RequestLogsRetentionConfig, RequestLogsRetentionMode};
 use settings::HotkeyConfig;
 use state::AppState;
 
@@ -112,6 +112,13 @@ fn ensure_default_settings(app: &AppHandle) -> Result<(), Box<dyn std::error::Er
     // How many recordings/history items to retain (impacts disk usage).
     // Keep this aligned with the UI default.
     set_if_missing("max_saved_recordings", json!(1000));
+
+    // Request logs retention (in-memory request log history).
+    // Keep this aligned with the UI default.
+    set_if_missing("request_logs_retention_mode", json!("amount"));
+    set_if_missing("request_logs_retention_amount", json!(10));
+    // Only used when mode == "time" (days; 0 = forever)
+    set_if_missing("request_logs_retention_days", json!(7));
     // Time-based retention for history/transcriptions. 0 = keep forever.
     set_if_missing("transcription_retention_days", json!(0));
     // New retention keys (unit+value) used by newer UI.
@@ -1378,8 +1385,45 @@ pub fn run() {
             }
 
             // Initialize request log store
-            let request_log_store = request_log::RequestLogStore::new();
-            app.manage(request_log_store);
+            #[cfg(desktop)]
+            {
+                use chrono::Duration as ChronoDuration;
+
+                let mode: String = get_setting_from_store(
+                    app.handle(),
+                    "request_logs_retention_mode",
+                    "amount".to_string(),
+                );
+                let amount: u64 =
+                    get_setting_from_store(app.handle(), "request_logs_retention_amount", 10u64);
+                let days: u64 =
+                    get_setting_from_store(app.handle(), "request_logs_retention_days", 7u64);
+
+                let mode = if mode == "time" {
+                    RequestLogsRetentionMode::Time
+                } else {
+                    RequestLogsRetentionMode::Amount
+                };
+
+                let retention = RequestLogsRetentionConfig {
+                    mode,
+                    amount: amount.max(1).min(1000) as usize,
+                    time_retention: if days == 0 {
+                        None
+                    } else {
+                        Some(ChronoDuration::days(days as i64))
+                    },
+                };
+
+                let request_log_store = request_log::RequestLogStore::new_with_retention(retention);
+                app.manage(request_log_store);
+            }
+
+            #[cfg(not(desktop))]
+            {
+                let request_log_store = request_log::RequestLogStore::new();
+                app.manage(request_log_store);
+            }
 
             // Initialize audio mute manager (may be None on unsupported platforms)
             if let Some(audio_mute_manager) = AudioMuteManager::new() {

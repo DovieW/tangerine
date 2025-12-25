@@ -7,14 +7,46 @@
 //! - Timing information
 //! - Errors if any
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
-/// Maximum number of request logs to keep in memory
-const MAX_LOGS: usize = 100;
+/// Default number of request logs to keep (matches UI default)
+const DEFAULT_MAX_LOGS: usize = 10;
+
+/// Defensive hard cap for request logs kept in memory.
+///
+/// Even when using time-based retention, we don't want unbounded growth.
+const HARD_MAX_LOGS: usize = 1000;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RequestLogsRetentionMode {
+    Amount,
+    Time,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct RequestLogsRetentionConfig {
+    pub mode: RequestLogsRetentionMode,
+    /// Only used when mode == Amount.
+    pub amount: usize,
+    /// Only used when mode == Time.
+    /// None means keep forever (time-based retention disabled).
+    pub time_retention: Option<ChronoDuration>,
+}
+
+impl Default for RequestLogsRetentionConfig {
+    fn default() -> Self {
+        Self {
+            mode: RequestLogsRetentionMode::Amount,
+            amount: DEFAULT_MAX_LOGS,
+            // Not used by default mode, but keep a sane value.
+            time_retention: Some(ChronoDuration::days(7)),
+        }
+    }
+}
 
 /// A single log entry within a request
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -191,6 +223,7 @@ impl RequestLog {
 pub struct RequestLogStore {
     logs: Arc<Mutex<VecDeque<RequestLog>>>,
     current: Arc<Mutex<Option<RequestLog>>>,
+    retention: Arc<Mutex<RequestLogsRetentionConfig>>,
 }
 
 impl Default for RequestLogStore {
@@ -202,10 +235,62 @@ impl Default for RequestLogStore {
 impl RequestLogStore {
     /// Create a new log store
     pub fn new() -> Self {
+        Self::new_with_retention(RequestLogsRetentionConfig::default())
+    }
+
+    pub fn new_with_retention(retention: RequestLogsRetentionConfig) -> Self {
+        // Allocate up to a modest default; VecDeque can grow, but we enforce caps on insert.
+        let initial_capacity = match retention.mode {
+            RequestLogsRetentionMode::Amount => retention.amount.max(1).min(HARD_MAX_LOGS),
+            RequestLogsRetentionMode::Time => DEFAULT_MAX_LOGS,
+        };
+
         Self {
-            logs: Arc::new(Mutex::new(VecDeque::with_capacity(MAX_LOGS))),
+            logs: Arc::new(Mutex::new(VecDeque::with_capacity(initial_capacity))),
             current: Arc::new(Mutex::new(None)),
+            retention: Arc::new(Mutex::new(retention)),
         }
+    }
+
+    pub fn set_retention(&self, retention: RequestLogsRetentionConfig) {
+        {
+            let mut cfg = self.retention.lock().unwrap();
+            *cfg = retention;
+        }
+        self.prune();
+    }
+
+    pub fn retention(&self) -> RequestLogsRetentionConfig {
+        *self.retention.lock().unwrap()
+    }
+
+    fn prune_locked(logs: &mut VecDeque<RequestLog>, cfg: RequestLogsRetentionConfig) {
+        // Time-based pruning first.
+        if cfg.mode == RequestLogsRetentionMode::Time {
+            if let Some(retention) = cfg.time_retention {
+                let cutoff = Utc::now() - retention;
+                logs.retain(|l| l.started_at >= cutoff);
+            }
+        }
+
+        // Apply amount-based pruning.
+        if cfg.mode == RequestLogsRetentionMode::Amount {
+            let target = cfg.amount.max(1);
+            while logs.len() > target {
+                logs.pop_front();
+            }
+        }
+
+        // Always enforce a hard cap as a safety valve.
+        while logs.len() > HARD_MAX_LOGS {
+            logs.pop_front();
+        }
+    }
+
+    pub fn prune(&self) {
+        let cfg = self.retention();
+        let mut logs = self.logs.lock().unwrap();
+        Self::prune_locked(&mut logs, cfg);
     }
 
     /// Start a new request log
@@ -246,14 +331,16 @@ impl RequestLogStore {
     /// Store a completed log
     fn store_log(&self, log: RequestLog) {
         let mut logs = self.logs.lock().unwrap();
-        if logs.len() >= MAX_LOGS {
-            logs.pop_front();
-        }
         logs.push_back(log);
+
+        let cfg = self.retention();
+        Self::prune_locked(&mut logs, cfg);
     }
 
     /// Get all stored logs (most recent first)
     pub fn get_logs(&self, limit: Option<usize>) -> Vec<RequestLog> {
+        self.prune();
+
         let logs = self.logs.lock().unwrap();
         let current = self.current.lock().unwrap();
 

@@ -357,6 +357,21 @@ export function useUpdateMaxSavedRecordings() {
   });
 }
 
+export function useUpdateRequestLogsRetention() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      mode: "amount" | "time";
+      amount: number;
+      days: number;
+    }) => tauriAPI.updateRequestLogsRetention(params),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
+      queryClient.invalidateQueries({ queryKey: ["requestLogs"] });
+    },
+  });
+}
+
 export function useUpdateTranscriptionRetentionDays() {
   const queryClient = useQueryClient();
   return useMutation({

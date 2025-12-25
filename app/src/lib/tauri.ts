@@ -110,6 +110,8 @@ export type OutputMode = "paste" | "paste_and_clipboard" | "clipboard";
 
 export type TranscriptionRetentionUnit = "days" | "hours";
 
+export type RequestLogsRetentionMode = "amount" | "time";
+
 export type SettingsGuideState = "pending" | "skipped" | "completed";
 
 function normalizeOutputMode(value: unknown): OutputMode {
@@ -172,6 +174,13 @@ export interface AppSettings {
   transcription_retention_value: number;
   // If enabled, deleting old transcriptions also deletes their recordings (best-effort).
   transcription_retention_delete_recordings: boolean;
+
+  // Request logs retention (in-memory request log history)
+  request_logs_retention_mode: RequestLogsRetentionMode;
+  // Only used when mode === "amount"
+  request_logs_retention_amount: number;
+  // Only used when mode === "time" (0 = forever)
+  request_logs_retention_days: number;
 }
 
 function normalizePlayingAudioHandling(value: unknown): PlayingAudioHandling {
@@ -251,6 +260,27 @@ function normalizeTranscriptionRetentionDeleteRecordings(
   value: unknown
 ): boolean {
   return typeof value === "boolean" ? value : false;
+}
+
+function normalizeRequestLogsRetentionMode(
+  value: unknown
+): RequestLogsRetentionMode {
+  return value === "time" || value === "amount" ? value : "amount";
+}
+
+function normalizeRequestLogsRetentionAmount(value: unknown): number {
+  // Keep this modest to avoid runaway memory in the backend.
+  if (typeof value !== "number" || !Number.isFinite(value)) return 10;
+  const rounded = Math.round(value);
+  // 1..1000 defensive
+  return Math.min(1000, Math.max(1, rounded));
+}
+
+function normalizeRequestLogsRetentionDays(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 7;
+  const rounded = Math.round(value);
+  // 0..36500 (~100 years) defensive
+  return Math.min(36500, Math.max(0, rounded));
 }
 
 // ============================================================================
@@ -603,8 +633,18 @@ export const tauriAPI = {
         await store.get("max_saved_recordings")
       ),
 
+      request_logs_retention_mode: normalizeRequestLogsRetentionMode(
+        await store.get("request_logs_retention_mode")
+      ),
+      request_logs_retention_amount: normalizeRequestLogsRetentionAmount(
+        await store.get("request_logs_retention_amount")
+      ),
+      request_logs_retention_days: normalizeRequestLogsRetentionDays(
+        await store.get("request_logs_retention_days")
+      ),
+
       // Time retention: new (unit+value), with legacy fallback to transcription_retention_days.
-      ...(await (async () => {
+      ...await(async () => {
         const rawUnit = await store.get("transcription_retention_unit");
         const rawValue = await store.get("transcription_retention_value");
 
@@ -626,7 +666,7 @@ export const tauriAPI = {
           transcription_retention_unit: unit,
           transcription_retention_value: value,
         };
-      })()),
+      })(),
       transcription_retention_delete_recordings:
         normalizeTranscriptionRetentionDeleteRecordings(
           await store.get("transcription_retention_delete_recordings")
@@ -847,6 +887,23 @@ export const tauriAPI = {
   async updateMaxSavedRecordings(max: number): Promise<void> {
     const store = await getStore();
     await store.set("max_saved_recordings", normalizeMaxSavedRecordings(max));
+    await store.save();
+  },
+
+  async updateRequestLogsRetention(params: {
+    mode: RequestLogsRetentionMode;
+    amount: number;
+    days: number;
+  }): Promise<void> {
+    const store = await getStore();
+
+    const mode = normalizeRequestLogsRetentionMode(params.mode);
+    const amount = normalizeRequestLogsRetentionAmount(params.amount);
+    const days = normalizeRequestLogsRetentionDays(params.days);
+
+    await store.set("request_logs_retention_mode", mode);
+    await store.set("request_logs_retention_amount", amount);
+    await store.set("request_logs_retention_days", days);
     await store.save();
   },
 

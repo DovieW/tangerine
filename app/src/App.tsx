@@ -25,6 +25,7 @@ import { LogsView } from "./components/LogsView";
 import {
   ApiKeysSettings,
   AudioSettings,
+  DataSettings,
   HotkeySettings,
   PromptSettings,
   ProfileConfigModal,
@@ -353,6 +354,7 @@ function SettingsView() {
           <Tabs.Tab value="audio">Audio</Tabs.Tab>
           <Tabs.Tab value="hotkeys">Hotkeys</Tabs.Tab>
           <Tabs.Tab value="api-keys">API Keys</Tabs.Tab>
+          <Tabs.Tab value="data">Data</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="ai" pt="md">
@@ -382,6 +384,12 @@ function SettingsView() {
         <Tabs.Panel value="api-keys" pt="md">
           <div className="settings-card">
             <ApiKeysSettings editingProfileId={editingProfileId} />
+          </div>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="data" pt="md">
+          <div className="settings-card">
+            <DataSettings editingProfileId={editingProfileId} />
           </div>
         </Tabs.Panel>
       </Tabs>
@@ -582,6 +590,7 @@ function SettingsViewWithGuideLauncher({
           <Tabs.Tab value="audio">Audio</Tabs.Tab>
           <Tabs.Tab value="hotkeys">Hotkeys</Tabs.Tab>
           <Tabs.Tab value="api-keys">API Keys</Tabs.Tab>
+          <Tabs.Tab value="data">Data</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="ai" pt="md">
@@ -614,6 +623,12 @@ function SettingsViewWithGuideLauncher({
         <Tabs.Panel value="api-keys" pt="md">
           <div className="settings-card">
             <ApiKeysSettings editingProfileId={editingProfileId} />
+          </div>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="data" pt="md">
+          <div className="settings-card">
+            <DataSettings editingProfileId={editingProfileId} />
           </div>
         </Tabs.Panel>
       </Tabs>
