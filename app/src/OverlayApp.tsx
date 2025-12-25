@@ -1407,6 +1407,20 @@ function RecordingControl() {
   );
   const exitTimerRef = useRef<number | null>(null);
 
+  // During the exit animation, the backend may have already flipped the pipeline
+  // back to idle. Hold onto the last busy phase so we don't briefly render the
+  // waveform right before the window hides.
+  const lastBusyPhaseRef = useRef<"transcribing" | "rewriting" | null>(null);
+
+  // In recording-only mode, the pipeline can reach `idle` slightly before we
+  // receive the backend's `overlay-hide-requested` event. Keep the phase text
+  // visible across that tiny gap too.
+  const [holdPhaseText, setHoldPhaseText] = useState<
+    "transcribing" | "rewriting" | null
+  >(null);
+  const holdPhaseTimerRef = useRef<number | null>(null);
+  const prevPipelineForPhaseHoldRef = useRef<PipelineState>("idle");
+
   // Collapsed/expanded UI state
   const [expanded, setExpanded] = useState(false);
   // We only render the expanded widget after the native window has resized wide enough,
@@ -1452,6 +1466,69 @@ function RecordingControl() {
     const interval = setInterval(syncState, 500);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    const prev = prevPipelineForPhaseHoldRef.current;
+    prevPipelineForPhaseHoldRef.current = pipelineState;
+
+    if (pipelineState === "transcribing" || pipelineState === "rewriting") {
+      lastBusyPhaseRef.current = pipelineState;
+      if (holdPhaseTimerRef.current) {
+        window.clearTimeout(holdPhaseTimerRef.current);
+        holdPhaseTimerRef.current = null;
+      }
+      if (holdPhaseText !== pipelineState) {
+        setHoldPhaseText(pipelineState);
+      }
+      return;
+    }
+
+    // While recording-only, we expect the window to hide after a capture cycle,
+    // but `idle` can arrive slightly before `overlay-hide-requested`.
+    if (
+      settings?.overlay_mode === "recording_only" &&
+      pipelineState === "idle" &&
+      (prev === "transcribing" || prev === "rewriting")
+    ) {
+      if (holdPhaseText !== prev) {
+        setHoldPhaseText(prev);
+      }
+      if (holdPhaseTimerRef.current) {
+        window.clearTimeout(holdPhaseTimerRef.current);
+      }
+      // Small grace window; hide event typically arrives quickly. If it doesn't,
+      // we still don't want the overlay to look "stuck".
+      holdPhaseTimerRef.current = window.setTimeout(() => {
+        setHoldPhaseText(null);
+        holdPhaseTimerRef.current = null;
+      }, 650);
+      return;
+    }
+
+    // New capture cycle (or user action) should not inherit prior phase text.
+    if (pipelineState === "arming" || pipelineState === "recording") {
+      lastBusyPhaseRef.current = null;
+      if (holdPhaseTimerRef.current) {
+        window.clearTimeout(holdPhaseTimerRef.current);
+        holdPhaseTimerRef.current = null;
+      }
+      if (holdPhaseText !== null) {
+        setHoldPhaseText(null);
+      }
+      return;
+    }
+
+    // In always-visible mode, don't let phase text linger after returning idle.
+    if (settings?.overlay_mode === "always" && pipelineState === "idle") {
+      if (holdPhaseTimerRef.current) {
+        window.clearTimeout(holdPhaseTimerRef.current);
+        holdPhaseTimerRef.current = null;
+      }
+      if (holdPhaseText !== null) {
+        setHoldPhaseText(null);
+      }
+    }
+  }, [holdPhaseText, pipelineState, settings?.overlay_mode]);
 
   // Resize the native window for the target widget, and only then render it.
   // This avoids the "intermediate step" where the widget is wider than the window
@@ -1543,6 +1620,13 @@ function RecordingControl() {
       invoke("hide_overlay").catch(console.error);
       // Prep for next entrance.
       setAnimState("enter");
+      // Clear held phase so the next show doesn't accidentally reuse it.
+      lastBusyPhaseRef.current = null;
+      if (holdPhaseTimerRef.current) {
+        window.clearTimeout(holdPhaseTimerRef.current);
+        holdPhaseTimerRef.current = null;
+      }
+      setHoldPhaseText(null);
       exitTimerRef.current = null;
     }, 210);
   }, []);
@@ -1926,12 +2010,26 @@ function RecordingControl() {
   const isWaveActive = isArming || isRecording;
   const isBusy = isArming || isLoading;
   const isError = pipelineState === "error";
-  const centerPhaseText =
-    pipelineState === "rewriting"
-      ? "rewriting..."
-      : pipelineState === "transcribing"
-      ? "transcribing..."
-      : null;
+  const centerPhaseText = (() => {
+    if (pipelineState === "rewriting") return "rewriting...";
+    if (pipelineState === "transcribing") return "transcribing...";
+
+    // Recording-only: keep the last busy phase visible across the small idle gap
+    // (before the backend hide request arrives).
+    if (settings?.overlay_mode === "recording_only") {
+      if (holdPhaseText === "rewriting") return "rewriting...";
+      if (holdPhaseText === "transcribing") return "transcribing...";
+    }
+
+    // While fading out, keep showing the last busy phase (if any) to avoid a
+    // one-frame flash of the waveform as the pipeline returns to idle.
+    if (animState === "exit") {
+      if (lastBusyPhaseRef.current === "rewriting") return "rewriting...";
+      if (lastBusyPhaseRef.current === "transcribing") return "transcribing...";
+    }
+
+    return null;
+  })();
 
   const renderLeftIndicator = () => {
     if (isError) {
