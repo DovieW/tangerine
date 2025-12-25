@@ -20,7 +20,7 @@ impl GroqSttProvider {
     ///
     /// # Arguments
     /// * `api_key` - Groq API key
-    /// * `model` - Model to use (e.g., "whisper-large-v3")
+    /// * `model` - Model to use (e.g., "whisper-large-v3-turbo")
     /// * `default_prompt` - Optional transcription prompt (OpenAI-compatible `prompt` field)
     pub fn new(api_key: String, model: Option<String>, default_prompt: Option<String>) -> Self {
         let client = reqwest::Client::builder()
@@ -31,7 +31,7 @@ impl GroqSttProvider {
         Self {
             client,
             api_key,
-            model: model.unwrap_or_else(|| "whisper-large-v3".to_string()),
+            model: model.unwrap_or_else(|| "whisper-large-v3-turbo".to_string()),
             default_prompt,
         }
     }
@@ -47,7 +47,7 @@ impl GroqSttProvider {
         Self {
             client,
             api_key,
-            model: model.unwrap_or_else(|| "whisper-large-v3".to_string()),
+            model: model.unwrap_or_else(|| "whisper-large-v3-turbo".to_string()),
             default_prompt,
         }
     }
@@ -126,7 +126,7 @@ mod tests {
     fn test_provider_creation() {
         let provider = GroqSttProvider::new("test-key".to_string(), None, None);
         assert_eq!(provider.name(), "groq");
-        assert_eq!(provider.model, "whisper-large-v3");
+        assert_eq!(provider.model, "whisper-large-v3-turbo");
     }
 
     #[test]

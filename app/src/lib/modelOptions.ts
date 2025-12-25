@@ -5,8 +5,8 @@ export type ModelOption = { value: string; label: string };
 // they always list the same models.
 export const STT_MODELS: Record<string, ModelOption[]> = {
   groq: [
-    { value: "whisper-large-v3", label: "Whisper Large V3" },
     { value: "whisper-large-v3-turbo", label: "Whisper Large V3 Turbo" },
+    { value: "whisper-large-v3", label: "Whisper Large V3" },
   ],
   openai: [
     // { value: "gpt-audio", label: "GPT Audio" },
@@ -32,7 +32,9 @@ export const LLM_MODELS: Record<string, ModelOption[]> = {
   groq: [
     { value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B Versatile" },
     { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant" },
-    { value: "mixtral-8x7b-32768", label: "Mixtral 8x7B" },
+    { value: "meta-llama/llama-guard-4-12b", label: "Llama Guard 4 12B" },
+    { value: "openai/gpt-oss-120b", label: "GPT-OSS 120B" },
+    { value: "openai/gpt-oss-20b", label: "GPT-OSS 20B" },
   ],
   openai: [
     { value: "gpt-4.1", label: "GPT-4.1" },
