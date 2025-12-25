@@ -1,6 +1,7 @@
-import { Button, PasswordInput, Tooltip } from "@mantine/core";
+import { Anchor, Button, PasswordInput, Tooltip } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import { Link as LinkIcon } from "lucide-react";
 import { configAPI, tauriAPI } from "../../lib/tauri";
 
 const GLOBAL_ONLY_TOOLTIP =
@@ -11,6 +12,7 @@ interface ApiKeyConfig {
   label: string;
   placeholder: string;
   storeKey: string;
+  getKeyUrl: string;
 }
 
 const API_KEYS: ApiKeyConfig[] = [
@@ -19,24 +21,28 @@ const API_KEYS: ApiKeyConfig[] = [
     label: "Groq",
     placeholder: "Enter API key",
     storeKey: "groq_api_key",
+    getKeyUrl: "https://console.groq.com/keys",
   },
   {
     id: "openai",
     label: "OpenAI",
     placeholder: "Enter API key",
     storeKey: "openai_api_key",
+    getKeyUrl: "https://platform.openai.com/api-keys",
   },
   {
     id: "deepgram",
     label: "Deepgram",
     placeholder: "Enter API key",
     storeKey: "deepgram_api_key",
+    getKeyUrl: "https://console.deepgram.com/project",
   },
   {
     id: "anthropic",
     label: "Anthropic",
     placeholder: "Enter API key",
     storeKey: "anthropic_api_key",
+    getKeyUrl: "https://platform.claude.com/settings/keys",
   },
 ];
 
@@ -98,7 +104,9 @@ function ApiKeyInput({ config }: { config: ApiKeyConfig }) {
   const trimmedValue = value.trim();
   const trimmedSaved = (savedKeyValue ?? "").trim();
   const isUnchanged =
-    trimmedSaved.length > 0 && trimmedValue.length > 0 && trimmedValue === trimmedSaved;
+    trimmedSaved.length > 0 &&
+    trimmedValue.length > 0 &&
+    trimmedValue === trimmedSaved;
 
   return (
     <div className="settings-row api-keys-row">
@@ -106,6 +114,22 @@ function ApiKeyInput({ config }: { config: ApiKeyConfig }) {
         <p className="settings-label">{config.label}</p>
         <p className="settings-description">
           {hasKey ? "API key configured" : "Enter your API key"}
+          {" · "}
+          <Anchor
+            href={config.getKeyUrl}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: "inherit",
+              lineHeight: "inherit",
+            }}
+          >
+            Get key
+            <LinkIcon size={12} />
+          </Anchor>
         </p>
       </div>
       <div className="settings-row-actions">
